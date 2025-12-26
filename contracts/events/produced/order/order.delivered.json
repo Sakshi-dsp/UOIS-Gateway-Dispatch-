@@ -1,0 +1,157 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://dispatch.arch/schemas/events/produced/order/order.delivered.json",
+  "title": "Order Delivered Event",
+  "description": "Dual-purpose event: SIGNAL-ONLY for Rider App (no order_details), FULL payload for other consumers (Invoicing Service, Location Service)",
+  "type": "object",
+  "required": [
+    "event_type",
+    "event_version",
+    "event_id",
+    "dispatch_order_id",
+    "client_order_id",
+    "rider_id",
+    "state",
+    "timestamp",
+    "traceparent"
+  ],
+  "properties": {
+    "event_type": {
+      "type": "string",
+      "const": "order.delivered",
+      "description": "Event type discriminator"
+    },
+    "event_version": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "Event schema version for evolution (v1.0 = Rider Payload Contract compliant)"
+    },
+    "event_id": {
+      "type": "string",
+      "format": "uuid",
+      "description": "Unique event identifier for deduplication"
+    },
+    "dispatch_order_id": {
+      "type": "string",
+      "description": "Order identifier in human-readable format (canonical ID)"
+    },
+    "client_order_id": {
+      "type": "string",
+      "description": "Client-facing order identifier (pass-through from order creation)"
+    },
+    "rider_id": {
+      "type": "string",
+      "description": "Assigned rider identifier"
+    },
+    "state": {
+      "type": "string",
+      "const": "DELIVERED",
+      "description": "Order state (canonical state machine value)"
+    },
+    "quote_id": {
+      "type": "string",
+      "format": "uuid",
+      "description": "Associated quote ID for correlation"
+    },
+    "client_id": {
+      "type": "string",
+      "format": "uuid",
+      "description": "Client identifier for billing context"
+    },
+    "order_details": {
+      "$ref": "../order_details.json",
+      "description": "FR-compliant order details object (present for Invoicing/Location Service, absent for Rider App)"
+    },
+    "quote_details": {
+      "type": "object",
+      "description": "Legacy quote information snapshot (present for Invoicing/Location Service, absent for Rider App)",
+      "properties": {
+        "quote_id": {
+          "type": "string",
+          "format": "uuid",
+          "description": "Quote ID"
+        },
+        "price": {
+          "type": "string",
+          "description": "Formatted price (e.g., ₹58)"
+        },
+        "price_minor_units": {
+          "type": "integer",
+          "description": "Price in minor units (paise)"
+        },
+        "currency": {
+          "type": "string",
+          "description": "Currency code"
+        },
+        "distance_origin_to_destination_km": {
+          "type": "number",
+          "description": "Quoted distance in kilometers"
+        },
+        "eta_origin": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Quoted ETA to origin"
+        },
+        "eta_destination": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Quoted ETA to destination"
+        }
+      }
+    },
+    "timestamps": {
+      "type": "object",
+      "description": "Order lifecycle timestamps (present for Invoicing/Location Service, absent for Rider App)",
+      "properties": {
+        "created_at": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Order creation timestamp"
+        },
+        "assigned_at": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Rider assignment timestamp"
+        },
+        "accepted_at": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Rider acceptance timestamp"
+        },
+        "picked_up_at": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Package pickup timestamp"
+        },
+        "delivered_at": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Delivery completion timestamp"
+        }
+      }
+    },
+    "traceparent": {
+      "type": "string",
+      "pattern": "^00-[0-9a-f]{32}-[0-9a-f]{16}-[0-9a-f]{2}$",
+      "description": "W3C traceparent header for distributed tracing"
+    },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Event publication timestamp in UTC"
+    }
+  },
+  "additionalProperties": false,
+  "oneOf": [
+    {
+      "description": "SIGNAL-ONLY payload for Rider App (no order_details)",
+      "not": {
+        "required": ["order_details"]
+      }
+    },
+    {
+      "description": "FULL payload for other consumers (Invoicing Service, Location Service)",
+      "required": ["order_details", "quote_details", "timestamps"]
+    }
+  ]
+}

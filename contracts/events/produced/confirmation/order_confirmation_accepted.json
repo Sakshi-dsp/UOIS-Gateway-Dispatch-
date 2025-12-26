@@ -1,0 +1,78 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://dispatch.arch/schemas/events/produced/confirmation/order_confirmation_accepted.json",
+  "title": "Order Confirmation Accepted Event",
+  "description": "Order created successfully, ready for rider assignment. Published to DroneAI.",
+  "type": "object",
+  "required": [
+    "event_type",
+    "event_version",
+    "event_id",
+    "dispatch_order_id",
+    "quote_id",
+    "traceparent",
+    "timestamp"
+  ],
+  "properties": {
+    "event_type": {
+      "type": "string",
+      "const": "ORDER_CONFIRMATION_ACCEPTED",
+      "description": "Event type discriminator"
+    },
+    "event_version": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "Event schema version for evolution"
+    },
+    "event_id": {
+      "type": "string",
+      "format": "uuid",
+      "description": "Unique event identifier for deduplication"
+    },
+    "dispatch_order_id": {
+      "type": "string",
+      "description": "Order identifier in human-readable format"
+    },
+    "quote_id": {
+      "type": "string",
+      "format": "uuid",
+      "description": "Validated quote ID from init flow"
+    },
+    "client_id": {
+      "type": "string",
+      "format": "uuid",
+      "description": "Client identifier for billing"
+    },
+    "client_order_id": {
+      "type": "string",
+      "description": "Client's order identifier (merchant's order ID, e.g., SWG-ORD-982734). This is what the CLIENT sends TO Dispatch domain services during order creation."
+    },
+    "origin_lat": {
+      "type": "number",
+      "description": "Pickup latitude"
+    },
+    "origin_lng": {
+      "type": "number",
+      "description": "Pickup longitude"
+    },
+    "destination_lat": {
+      "type": "number",
+      "description": "Drop latitude"
+    },
+    "destination_lng": {
+      "type": "number",
+      "description": "Drop longitude"
+    },
+    "traceparent": {
+      "type": "string",
+      "pattern": "^00-[0-9a-f]{32}-[0-9a-f]{16}-[0-9a-f]{2}$",
+      "description": "W3C traceparent header for distributed tracing"
+    },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Event publication timestamp in UTC"
+    }
+  },
+  "additionalProperties": false
+}

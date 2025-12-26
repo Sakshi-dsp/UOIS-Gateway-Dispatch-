@@ -1,0 +1,81 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://dispatch.arch/schemas/events/consumed/droneai/rider_assignment_failed.json",
+  "title": "RIDER_ASSIGNMENT_FAILED Event (Consumed)",
+  "description": "Owned by DroneAI. Rider assignment failure notification for order confirmation.",
+  "type": "object",
+  "required": [
+    "event_type",
+    "event_id",
+    "dispatch_order_id",
+    "reason",
+    "attempt_count",
+    "timestamp"
+  ],
+  "properties": {
+    "event_type": {
+      "type": "string",
+      "const": "RIDER_ASSIGNMENT_FAILED",
+      "description": "Event type discriminator"
+    },
+    "event_id": {
+      "type": "string",
+      "format": "uuid",
+      "description": "Unique event identifier (UUID v4)"
+    },
+    "dispatch_order_id": {
+      "type": "string",
+      "description": "Order identifier in human-readable format"
+    },
+    "reason": {
+      "type": "string",
+      "enum": ["NO_RIDERS_AVAILABLE", "ALL_RIDERS_DECLINED", "RIDER_TIMEOUT", "SYSTEM_ERROR"],
+      "description": "Reason for assignment failure"
+    },
+    "attempt_count": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "Number of assignment attempts made"
+    },
+    "max_attempts": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "Maximum allowed assignment attempts"
+    },
+    "last_attempt_timestamp": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Timestamp of the last assignment attempt"
+    },
+    "candidate_riders_count": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Number of candidate riders considered"
+    },
+    "declined_riders_count": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Number of riders who declined the assignment"
+    },
+    "timeout_riders_count": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Number of riders who timed out without response"
+    },
+    "scoring_metadata": {
+      "type": "object",
+      "description": "Scoring and ranking metadata from final attempt",
+      "additionalProperties": true
+    },
+    "retry_recommended": {
+      "type": "boolean",
+      "description": "Whether retry is recommended (based on time elapsed and business rules)"
+    },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Event timestamp in UTC"
+    }
+  },
+  "additionalProperties": false
+}

@@ -1,0 +1,76 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://dispatch.arch/schemas/events/produced/order/order.arrived_at_drop.json",
+  "title": "Order Arrived at Drop Event",
+  "description": "Rider-facing event published when rider arrives at destination",
+  "type": "object",
+  "required": [
+    "event_type",
+    "event_version",
+    "event_id",
+    "dispatch_order_id",
+    "rider_id",
+    "client_order_id",
+    "traceparent",
+    "timestamp"
+  ],
+  "properties": {
+    "event_type": {
+      "type": "string",
+      "const": "order.arrived_at_drop",
+      "description": "Event type discriminator"
+    },
+    "event_version": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "Event schema version for evolution"
+    },
+    "event_id": {
+      "type": "string",
+      "format": "uuid",
+      "description": "Unique event identifier for deduplication"
+    },
+    "dispatch_order_id": {
+      "type": "string",
+      "description": "Order identifier in human-readable format"
+    },
+    "rider_id": {
+      "type": "string",
+      "description": "Assigned rider identifier"
+    },
+    "client_order_id": {
+      "type": "string",
+      "description": "Client-facing order identifier"
+    },
+    "quote_id": {
+      "type": "string",
+      "format": "uuid",
+      "description": "Associated quote ID"
+    },
+    "drop_location": {
+      "type": "object",
+      "properties": {
+        "lat": {
+          "type": "number",
+          "description": "Drop latitude"
+        },
+        "lng": {
+          "type": "number",
+          "description": "Drop longitude"
+        }
+      },
+      "description": "Optional drop location coordinates"
+    },
+    "traceparent": {
+      "type": "string",
+      "pattern": "^00-[0-9a-f]{32}-[0-9a-f]{16}-[0-9a-f]{2}$",
+      "description": "W3C traceparent header for distributed tracing"
+    },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Event publication timestamp in UTC"
+    }
+  },
+  "additionalProperties": false
+}

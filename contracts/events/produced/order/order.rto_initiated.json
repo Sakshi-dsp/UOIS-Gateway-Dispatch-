@@ -1,0 +1,81 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://dispatch.arch/schemas/events/produced/order/order.rto_initiated.json",
+  "title": "Order RTO Initiated Event",
+  "description": "Rider-facing event published when return to origin (RTO) is started",
+  "type": "object",
+  "required": [
+    "event_type",
+    "event_version",
+    "event_id",
+    "dispatch_order_id",
+    "rider_id",
+    "client_order_id",
+    "reason",
+    "traceparent",
+    "timestamp"
+  ],
+  "properties": {
+    "event_type": {
+      "type": "string",
+      "const": "order.rto_initiated",
+      "description": "Event type discriminator"
+    },
+    "event_version": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "Event schema version for evolution"
+    },
+    "event_id": {
+      "type": "string",
+      "format": "uuid",
+      "description": "Unique event identifier for deduplication"
+    },
+    "dispatch_order_id": {
+      "type": "string",
+      "description": "Order identifier in human-readable format"
+    },
+    "rider_id": {
+      "type": "string",
+      "description": "Assigned rider identifier"
+    },
+    "client_order_id": {
+      "type": "string",
+      "description": "Client-facing order identifier"
+    },
+    "quote_id": {
+      "type": "string",
+      "format": "uuid",
+      "description": "Associated quote ID"
+    },
+    "reason": {
+      "type": "string",
+      "description": "Reason for RTO initiation (e.g., customer unavailable, wrong address)"
+    },
+    "failed_delivery_location": {
+      "type": "object",
+      "properties": {
+        "lat": {
+          "type": "number",
+          "description": "Failed delivery latitude"
+        },
+        "lng": {
+          "type": "number",
+          "description": "Failed delivery longitude"
+        }
+      },
+      "description": "Location where delivery failed (if available)"
+    },
+    "traceparent": {
+      "type": "string",
+      "pattern": "^00-[0-9a-f]{32}-[0-9a-f]{16}-[0-9a-f]{2}$",
+      "description": "W3C traceparent header for distributed tracing"
+    },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Event publication timestamp in UTC"
+    }
+  },
+  "additionalProperties": false
+}

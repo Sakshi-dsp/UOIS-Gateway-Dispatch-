@@ -1,0 +1,85 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://dispatch.arch/schemas/events/consumed/droneai/rider_assigned.json",
+  "title": "RIDER_ASSIGNED Event (Consumed)",
+  "description": "Owned by DroneAI. Rider assignment success notification for order confirmation.",
+  "type": "object",
+  "required": [
+    "event_type",
+    "event_id",
+    "dispatch_order_id",
+    "rider_id",
+    "assignment_id",
+    "timestamp"
+  ],
+  "properties": {
+    "event_type": {
+      "type": "string",
+      "const": "RIDER_ASSIGNED",
+      "description": "Event type discriminator"
+    },
+    "event_id": {
+      "type": "string",
+      "format": "uuid",
+      "description": "Unique event identifier (UUID v4)"
+    },
+    "dispatch_order_id": {
+      "type": "string",
+      "description": "Order identifier in human-readable format"
+    },
+    "rider_id": {
+      "type": "string",
+      "description": "Assigned rider identifier"
+    },
+    "assignment_id": {
+      "type": "string",
+      "format": "uuid",
+      "description": "Assignment session identifier"
+    },
+    "rider_location": {
+      "type": "object",
+      "description": "Rider's current location at time of assignment",
+      "required": ["lat", "lng"],
+      "properties": {
+        "lat": {
+          "type": "number",
+          "minimum": -90.0,
+          "maximum": 90.0,
+          "description": "Rider latitude"
+        },
+        "lng": {
+          "type": "number",
+          "minimum": -180.0,
+          "maximum": 180.0,
+          "description": "Rider longitude"
+        },
+        "accuracy": {
+          "type": "number",
+          "minimum": 0,
+          "description": "GPS accuracy in meters"
+        }
+      }
+    },
+    "eta_to_pickup": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Estimated time to pickup in seconds"
+    },
+    "distance_to_pickup": {
+      "type": "number",
+      "minimum": 0,
+      "description": "Distance to pickup location in meters"
+    },
+    "scoring_metadata": {
+      "type": "object",
+      "description": "Scoring and ranking metadata from DroneAI",
+      "additionalProperties": true
+    },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Event timestamp in UTC"
+    }
+  },
+  "additionalProperties": false
+}

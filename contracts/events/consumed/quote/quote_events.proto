@@ -1,0 +1,49 @@
+syntax = "proto3";
+
+package dispatch.events.quote.v1;
+
+option go_package = "github.com/dispatch/contracts/events/produced;quotev1";
+
+// Money represents a structured price with value and currency
+// CRITICAL: Value MUST be numeric (no currency symbol). Formatted strings only in UI layers.
+message Money {
+  double value = 1; // Price value as decimal (e.g., 58.00). MUST be numeric, not formatted string.
+  string currency = 2; // ISO 4217 currency code (e.g., "INR", "USD")
+}
+
+// QuoteComputedEvent is published by Quote Service when price computation completes
+// QUOTE_COMPUTED for /search flow (consumed by UOIS)
+// REVALIDATION_QUOTE_COMPUTED for /init revalidation flow (consumed by Order Service)
+message QuoteComputedEvent {
+  string event_type = 1; // "QUOTE_COMPUTED" or "REVALIDATION_QUOTE_COMPUTED"
+  string search_id = 2; // UUID - exact same search_id UOIS generated. Single source of truth for correlation.
+  Money price = 3; // Structured price object (value + currency)
+  string ttl = 4; // ISO 8601 duration: "PT10M" for QUOTE_COMPUTED, "PT15M" for REVALIDATION_QUOTE_COMPUTED
+  int32 ttl_seconds = 5; // TTL in seconds: 600 for QUOTE_COMPUTED, 900 for REVALIDATION_QUOTE_COMPUTED
+  bool serviceable = 6; // Passthrough from SERVICEABILITY_FOUND/REVALIDATION_FOUND. Location Service is source of truth. REQUIRED for UOIS to compose /on_search response.
+  string timestamp = 7; // ISO 8601 UTC timestamp
+  string eta_origin = 8; // ISO 8601 duration or timestamp (optional, recommended for UOIS)
+  string eta_origin_to_destination = 9; // ISO 8601 duration (optional, recommended for UOIS)
+  double distance_origin_to_destination = 10; // Route distance in kilometers (optional)
+  string origin_timestamp = 11; // ISO 8601: when /search was initiated (optional)
+  string traceparent = 12; // W3C traceparent header (format: 00-<trace-id>-<span-id>-<flags>). REQUIRED for end-to-end observability. Pass-through from SERVICEABILITY_FOUND/REVALIDATION_FOUND event.
+  string trace_id = 13; // Distributed tracing identifier (extracted from traceparent for convenience). Optional but RECOMMENDED. Used for logging alongside search_id.
+  map<string, string> metadata = 14; // Optional metadata (recommended: traceparent, trace_id, rate_card_id, zone_id)
+}
+
+// ProcessingErrorEvent is published by Quote Service when pricing computation fails
+// MUST NOT silently fail - always publish error event so UOIS can return ONDC errors
+message ProcessingErrorEvent {
+  string event_type = 1; // "QUOTE_ERROR" or "REVALIDATION_QUOTE_ERROR"
+  string search_id = 2; // UUID - exact same search_id UOIS generated
+  string stage = 3; // Processing stage: "VALIDATION", "ADMIN_CONFIG_FETCH", "PRICING_COMPUTATION", "CACHE_WRITE", "EVENT_PUBLISH"
+  string code = 4; // ONDC error code format (e.g., "65001", "65002", "65003")
+  string message = 5; // Human-readable error message
+  map<string, string> details = 6; // Optional structured error details
+  int32 retry_after_seconds = 7; // Recommended retry delay (optional, for transient failures)
+  string origin_timestamp = 8; // ISO 8601: when /search was initiated (optional)
+  string traceparent = 9; // W3C traceparent header (format: 00-<trace-id>-<span-id>-<flags>). REQUIRED for end-to-end observability. Pass-through from SERVICEABILITY_FOUND/REVALIDATION_FOUND event.
+  string trace_id = 10; // Distributed tracing identifier (extracted from traceparent for convenience). Optional but RECOMMENDED. Critical for post-mortem debugging.
+  string timestamp = 11; // ISO 8601 UTC timestamp
+}
+

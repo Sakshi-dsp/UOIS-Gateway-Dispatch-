@@ -1,0 +1,76 @@
+{
+  "$id": "https://dispatch.arch/schemas/events/v1/processing_error.json",
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "ProcessingErrorEvent",
+  "description": "Error event published by Quote Service when pricing computation fails or validation errors occur. Enables UOIS to return proper ONDC errors to clients. MUST NOT silently fail - always publish error event.",
+  "type": "object",
+  "required": [
+    "event_type",
+    "search_id",
+    "stage",
+    "code",
+    "message",
+    "timestamp"
+  ],
+  "properties": {
+    "event_type": {
+      "type": "string",
+      "enum": ["QUOTE_ERROR", "REVALIDATION_QUOTE_ERROR"],
+      "description": "Event type discriminator. QUOTE_ERROR for /search flow failures (consumed by UOIS), REVALIDATION_QUOTE_ERROR for /init revalidation failures (consumed by Order Service)."
+    },
+    "search_id": {
+      "type": "string",
+      "format": "uuid",
+      "description": "Serviceability ID (exact same search_id UOIS generated). Single source of truth for correlation. Must match search_id from SERVICEABILITY_FOUND/REVALIDATION_FOUND event."
+    },
+    "stage": {
+      "type": "string",
+      "enum": [
+        "VALIDATION",
+        "ADMIN_CONFIG_FETCH",
+        "PRICING_COMPUTATION",
+        "CACHE_WRITE",
+        "EVENT_PUBLISH"
+      ],
+      "description": "Processing stage where the error occurred. Helps identify failure point for debugging and monitoring."
+    },
+    "code": {
+      "type": "string",
+      "description": "Error code for deterministic handling. MUST follow ONDC error code format (e.g., '65001' for Admin config miss, '65002' for computation failure, '65003' for location timeout). UOIS will map this to ONDC error response."
+    },
+    "message": {
+      "type": "string",
+      "description": "Human-readable error message for debugging and logging."
+    },
+    "details": {
+      "type": "object",
+      "additionalProperties": true,
+      "description": "Optional structured error details (e.g., validation failures, retry information, fallback status)."
+    },
+    "retry_after_seconds": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Recommended retry delay in seconds. Set for transient failures (e.g., Admin Service timeout). Omit for permanent failures."
+    },
+    "origin_timestamp": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Timestamp when the original /search request was initiated. Used for correlation and stale request detection."
+    },
+    "traceparent": {
+      "type": "string",
+      "pattern": "^00-[0-9a-f]{32}-[0-9a-f]{16}-[0-9a-f]{2}$",
+      "description": "W3C traceparent header for distributed tracing (format: 00-<trace-id>-<span-id>-<flags>). REQUIRED for end-to-end observability. Pass-through from SERVICEABILITY_FOUND/REVALIDATION_FOUND event. Quote Service MUST propagate unchanged to maintain trace continuity even in error scenarios."
+    },
+    "trace_id": {
+      "type": "string",
+      "description": "Distributed tracing identifier (extracted from traceparent for convenience). Optional but RECOMMENDED. Propagated from UOIS Gateway. Used for logging and correlation alongside search_id. Critical for post-mortem debugging."
+    },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Error event publication timestamp in UTC (ISO 8601)."
+    }
+  },
+  "additionalProperties": false
+}

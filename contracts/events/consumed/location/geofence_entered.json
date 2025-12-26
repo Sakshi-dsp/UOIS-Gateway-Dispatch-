@@ -1,0 +1,40 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://dispatch.arch/schemas/events/consumed/location/geofence_entered.json",
+  "title": "Geofence Entered Event",
+  "description": "Event published by Location Service when rider enters a geofence zone. Order Service consumes this event for zone-based notifications and transitions. Generated from Location Service internal/models/events.go GeofenceEvent struct.",
+  "type": "object",
+  "required": [
+    "event_type",
+    "dispatch_order_id",
+    "rider_id",
+    "location_type",
+    "timestamp"
+  ],
+  "properties": {
+    "event_type": {
+      "type": "string",
+      "const": "geofence.entered",
+      "description": "Event type discriminator"
+    },
+    "dispatch_order_id": {
+      "type": "string",
+      "description": "Order identifier in human-readable format"
+    },
+    "rider_id": {
+      "type": "string",
+      "description": "Assigned rider identifier"
+    },
+    "location_type": {
+      "type": "string",
+      "enum": ["ORIGIN", "DESTINATION"],
+      "description": "Whether geofence is for pickup (ORIGIN) or drop (DESTINATION) location"
+    },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Event timestamp in UTC"
+    }
+  },
+  "additionalProperties": false
+}

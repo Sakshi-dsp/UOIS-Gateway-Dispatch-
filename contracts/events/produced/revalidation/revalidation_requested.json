@@ -1,0 +1,86 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://dispatch.arch/schemas/events/produced/revalidation/revalidation_requested.json",
+  "title": "Revalidation Requested Event",
+  "description": "Triggers coordinated revalidation workflow between Location and Quote Services. Order Service owns the trigger, Location/Quote own their respective response schemas.",
+  "type": "object",
+  "required": [
+    "event_type",
+    "event_version",
+    "event_id",
+    "dispatch_order_id",
+    "search_id",
+    "origin_lat",
+    "origin_lng",
+    "destination_lat",
+    "destination_lng",
+    "traceparent",
+    "timestamp"
+  ],
+  "properties": {
+    "event_type": {
+      "type": "string",
+      "const": "REVALIDATION_REQUESTED",
+      "description": "Event type discriminator"
+    },
+    "event_version": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "Event schema version for evolution"
+    },
+    "event_id": {
+      "type": "string",
+      "format": "uuid",
+      "description": "Unique event identifier for deduplication"
+    },
+    "dispatch_order_id": {
+      "type": "string",
+      "description": "Order identifier in human-readable format"
+    },
+    "search_id": {
+      "type": "string",
+      "format": "uuid",
+      "description": "Original search session ID from UOIS"
+    },
+    "origin_lat": {
+      "type": "number",
+      "minimum": -90.0,
+      "maximum": 90.0,
+      "description": "Pickup latitude"
+    },
+    "origin_lng": {
+      "type": "number",
+      "minimum": -180.0,
+      "maximum": 180.0,
+      "description": "Pickup longitude"
+    },
+    "destination_lat": {
+      "type": "number",
+      "minimum": -90.0,
+      "maximum": 90.0,
+      "description": "Drop latitude"
+    },
+    "destination_lng": {
+      "type": "number",
+      "minimum": -180.0,
+      "maximum": 180.0,
+      "description": "Drop longitude"
+    },
+    "correlation_id": {
+      "type": "string",
+      "format": "uuid",
+      "description": "Optional correlation ID for tracing"
+    },
+    "traceparent": {
+      "type": "string",
+      "pattern": "^00-[0-9a-f]{32}-[0-9a-f]{16}-[0-9a-f]{2}$",
+      "description": "W3C traceparent header for distributed tracing"
+    },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Event publication timestamp in UTC"
+    }
+  },
+  "additionalProperties": false
+}

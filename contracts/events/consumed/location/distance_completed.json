@@ -1,0 +1,159 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://dispatch.com/schemas/location/distance-completed/v1.0.0",
+  "title": "DistanceCompletedEvent",
+  "description": "Event published by Location Service when an order reaches a terminal state and final distance tracking is complete. Used by Invoicing Service to calculate rider payout based on actual distance travelled.",
+  "type": "object",
+  "required": [
+    "event_type",
+    "dispatch_order_id",
+    "rider_id",
+    "distance_meters",
+    "distance_km",
+    "points_collected",
+    "tracking_duration_seconds",
+    "started_at",
+    "completed_at",
+    "completion_percentage",
+    "timestamp"
+  ],
+  "properties": {
+    "event_type": {
+      "type": "string",
+      "const": "distance.completed",
+      "description": "Event type discriminator"
+    },
+    "event_id": {
+      "type": "string",
+      "format": "uuid",
+      "description": "Unique event identifier (UUID v4) - optional, for event-level tracking"
+    },
+    "dispatch_order_id": {
+      "type": "string",
+      "format": "uuid",
+      "description": "Order UUID"
+    },
+    "rider_id": {
+      "type": "string",
+      "format": "uuid",
+      "description": "Rider who completed the order"
+    },
+    "distance_meters": {
+      "type": "number",
+      "minimum": 0,
+      "description": "Total distance travelled in meters (actual GPS-tracked distance)"
+    },
+    "distance_km": {
+      "type": "number",
+      "minimum": 0,
+      "description": "Total distance travelled in kilometers (for display)"
+    },
+    "planned_distance_meters": {
+      "type": "number",
+      "minimum": 0,
+      "description": "Planned OSRM route distance in meters"
+    },
+    "route_deviation_percentage": {
+      "type": "number",
+      "minimum": 0,
+      "description": "Deviation from planned route ((actual - planned) / planned * 100)"
+    },
+    "points_collected": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Number of GPS location updates processed"
+    },
+    "tracking_duration_seconds": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Duration of distance tracking (from assigned to completed)"
+    },
+    "started_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO 8601 timestamp when tracking started (order assigned)"
+    },
+    "completed_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO 8601 timestamp when tracking completed (order delivered/cancelled)"
+    },
+    "completion_percentage": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 100,
+      "description": "Final geo-based completion percentage (0-100)"
+    },
+    "order_outcome": {
+      "type": "string",
+      "enum": ["DELIVERED", "CANCELLED", "RTO_DELIVERED"],
+      "description": "Final order state that triggered distance completion"
+    },
+    "tracking_quality": {
+      "type": "object",
+      "description": "Quality metrics for distance tracking",
+      "properties": {
+        "gps_quality": {
+          "type": "string",
+          "enum": ["HIGH", "MEDIUM", "LOW"],
+          "description": "Overall GPS accuracy quality"
+        },
+        "average_accuracy_meters": {
+          "type": "number",
+          "minimum": 0,
+          "description": "Average GPS accuracy across all points"
+        },
+        "update_frequency": {
+          "type": "string",
+          "enum": ["HIGH", "MEDIUM", "LOW", "SPARSE"],
+          "description": "Location update frequency quality"
+        },
+        "offline_periods_count": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Number of times rider went offline during tracking"
+        },
+        "osrm_snapping_success_rate": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "description": "Percentage of GPS points successfully snapped to route (0.0 to 1.0)"
+        }
+      },
+      "additionalProperties": false
+    },
+    "milestones": {
+      "type": "object",
+      "description": "Distance at key order milestones",
+      "properties": {
+        "distance_to_pickup_meters": {
+          "type": "number",
+          "minimum": 0,
+          "description": "Distance rider travelled to reach pickup"
+        },
+        "distance_pickup_to_delivery_meters": {
+          "type": "number",
+          "minimum": 0,
+          "description": "Distance from pickup to delivery"
+        },
+        "picked_up_at": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Timestamp when order was picked up"
+        }
+      },
+      "additionalProperties": false
+    },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO 8601 timestamp when event was generated"
+    },
+    "correlation_id": {
+      "type": "string",
+      "format": "uuid",
+      "description": "Optional tracing correlation ID"
+    }
+  },
+  "additionalProperties": false
+}

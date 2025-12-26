@@ -1,0 +1,124 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://dispatch.arch/schemas/events/produced/order/order.lifecycle.json",
+  "title": "Order Lifecycle Event",
+  "description": "Consolidated order state transition event. Consumers filter by 'state' field instead of separate event types.",
+  "type": "object",
+  "required": [
+    "event_type",
+    "event_version",
+    "event_id",
+    "dispatch_order_id",
+    "state",
+    "previous_state",
+    "traceparent",
+    "timestamp"
+  ],
+  "properties": {
+    "event_type": {
+      "type": "string",
+      "const": "order.lifecycle",
+      "description": "Event type discriminator"
+    },
+    "event_version": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "Event schema version for evolution"
+    },
+    "event_id": {
+      "type": "string",
+      "format": "uuid",
+      "description": "Unique event identifier for deduplication"
+    },
+    "dispatch_order_id": {
+      "type": "string",
+      "description": "Order identifier in human-readable format"
+    },
+    "client_order_id": {
+      "type": "string",
+      "description": "Client-facing order identifier (optional, included when available)"
+    },
+    "quote_id": {
+      "type": "string",
+      "format": "uuid",
+      "description": "Associated quote ID (if available)"
+    },
+    "rider_id": {
+      "type": "string",
+      "description": "Assigned rider identifier (if available)"
+    },
+    "state": {
+      "type": "string",
+      "enum": [
+        "CREATED",
+        "QUOTE_VALIDATED",
+        "QUOTE_INVALID",
+        "CONFIRMATION_PENDING",
+        "CONFIRMED",
+        "ASSIGNED",
+        "SOFT_ARRIVED_AT_ORIGIN",
+        "PICKED_UP",
+        "SOFT_ARRIVED_AT_DESTINATION",
+        "DELIVERED",
+        "CANCELLED",
+        "RTO_INITIATED",
+        "RTO_DELIVERED",
+        "COMPLETED",
+        "EXPIRED"
+      ],
+      "description": "Current canonical order state"
+    },
+    "previous_state": {
+      "type": "string",
+      "enum": [
+        "CREATED",
+        "QUOTE_VALIDATED",
+        "QUOTE_INVALID",
+        "CONFIRMATION_PENDING",
+        "CONFIRMED",
+        "ASSIGNED",
+        "SOFT_ARRIVED_AT_ORIGIN",
+        "PICKED_UP",
+        "SOFT_ARRIVED_AT_DESTINATION",
+        "DELIVERED",
+        "CANCELLED",
+        "RTO_INITIATED",
+        "RTO_DELIVERED",
+        "COMPLETED",
+        "EXPIRED"
+      ],
+      "description": "Previous canonical order state"
+    },
+    "reason": {
+      "type": "string",
+      "description": "Human-readable reason for state transition"
+    },
+    "source": {
+      "type": "string",
+      "enum": [
+        "ORDER_SERVICE",
+        "RIDER_APP",
+        "GATEWAY_GEOFENCE",
+        "ADMIN_PANEL",
+        "SYSTEM_TIMEOUT"
+      ],
+      "description": "Source of the state transition"
+    },
+    "metadata": {
+      "type": "object",
+      "additionalProperties": true,
+      "description": "State-specific metadata (flexible for future extensions)"
+    },
+    "traceparent": {
+      "type": "string",
+      "pattern": "^00-[0-9a-f]{32}-[0-9a-f]{16}-[0-9a-f]{2}$",
+      "description": "W3C traceparent header for distributed tracing"
+    },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Event publication timestamp in UTC"
+    }
+  },
+  "additionalProperties": false
+}

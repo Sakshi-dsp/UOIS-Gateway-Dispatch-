@@ -1,0 +1,79 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://dispatch.arch/schemas/events/consumed/uois/confirm_requested.json",
+  "title": "CONFIRM_REQUESTED Event (Consumed)",
+  "description": "Owned by UOIS Gateway. Triggers order creation and rider assignment for /confirm flow.",
+  "type": "object",
+  "required": [
+    "event_type",
+    "event_id",
+    "quote_id",
+    "traceparent",
+    "timestamp"
+  ],
+  "properties": {
+    "event_type": {
+      "type": "string",
+      "const": "CONFIRM_REQUESTED",
+      "description": "Event type discriminator"
+    },
+    "event_id": {
+      "type": "string",
+      "format": "uuid",
+      "description": "Unique event identifier (UUID v4)"
+    },
+    "quote_id": {
+      "type": "string",
+      "format": "uuid",
+      "description": "Validated quote ID from /init flow"
+    },
+    "client_id": {
+      "type": "string",
+      "format": "uuid",
+      "description": "Client identifier for billing context"
+    },
+    "client_order_id": {
+      "type": "string",
+      "description": "Client's order identifier (merchant's order ID, e.g., SWG-ORD-982734). This is what the CLIENT sends TO Dispatch domain services during order creation."
+    },
+    "payment_info": {
+      "type": "object",
+      "description": "Payment details for the order",
+      "properties": {
+        "method": {
+          "type": "string",
+          "enum": ["PREPAID", "COD"],
+          "description": "Payment method"
+        },
+        "amount": {
+          "type": "object",
+          "required": ["value", "currency"],
+          "description": "Payment amount",
+          "properties": {
+            "value": {
+              "type": "number",
+              "minimum": 0,
+              "description": "Amount value"
+            },
+            "currency": {
+              "type": "string",
+              "pattern": "^[A-Z]{3}$",
+              "description": "ISO 4217 currency code"
+            }
+          }
+        }
+      }
+    },
+    "traceparent": {
+      "type": "string",
+      "pattern": "^00-[0-9a-f]{32}-[0-9a-f]{16}-[0-9a-f]{2}$",
+      "description": "W3C traceparent header for distributed tracing"
+    },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Event publication timestamp in UTC"
+    }
+  },
+  "additionalProperties": false
+}

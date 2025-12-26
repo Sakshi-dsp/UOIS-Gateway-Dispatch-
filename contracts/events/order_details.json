@@ -1,0 +1,116 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://dispatch.arch/schemas/events/order_details.json",
+  "title": "Order Details Schema",
+  "description": "Canonical order_details object for rider-facing events (FR-compliant structure)",
+  "type": "object",
+  "required": [
+    "origin",
+    "destination",
+    "package_info",
+    "payment",
+    "navigation"
+  ],
+  "properties": {
+    "origin": {
+      "type": "object",
+      "required": ["lat", "lng"],
+      "properties": {
+        "lat": {
+          "type": "number",
+          "description": "Origin latitude"
+        },
+        "lng": {
+          "type": "number",
+          "description": "Origin longitude"
+        },
+        "address": {
+          "type": "string",
+          "description": "Human-readable origin address"
+        }
+      },
+      "description": "Origin location details"
+    },
+    "destination": {
+      "type": "object",
+      "required": ["lat", "lng"],
+      "properties": {
+        "lat": {
+          "type": "number",
+          "description": "Destination latitude"
+        },
+        "lng": {
+          "type": "number",
+          "description": "Destination longitude"
+        },
+        "address": {
+          "type": "string",
+          "description": "Human-readable destination address"
+        }
+      },
+      "description": "Destination location details"
+    },
+    "package_info": {
+      "type": "object",
+      "required": ["weight_kg", "category", "contains_items"],
+      "properties": {
+        "weight_kg": {
+          "type": "number",
+          "description": "Package weight in kilograms"
+        },
+        "category": {
+          "type": "string",
+          "description": "Package category (e.g., GROCERY, ELECTRONICS)"
+        },
+        "contains_items": {
+          "type": "boolean",
+          "description": "Whether package contains item-level details (capability-based approach)"
+        }
+      },
+      "description": "Package information with capability-based item handling"
+    },
+    "payment": {
+      "type": "object",
+      "required": ["method", "amount_minor_units", "currency"],
+      "properties": {
+        "method": {
+          "type": "string",
+          "enum": ["COD", "PREPAID", "POSTPAID"],
+          "description": "Payment method (COD = Cash on Delivery, PREPAID, POSTPAID)"
+        },
+        "amount_minor_units": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Payment amount in minor currency units (paise for INR)"
+        },
+        "currency": {
+          "type": "string",
+          "description": "Currency code (e.g., INR, USD)"
+        }
+      },
+      "description": "Payment details from Quote Service mapping"
+    },
+    "navigation": {
+      "type": "object",
+      "required": ["distance_km"],
+      "properties": {
+        "distance_km": {
+          "type": "number",
+          "description": "Total distance in kilometers"
+        },
+        "eta_origin": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Estimated time of arrival at origin"
+        },
+        "eta_destination": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Estimated time of arrival at destination"
+        }
+      },
+      "description": "Navigation information from Quote Service"
+    }
+  },
+  "additionalProperties": false
+}

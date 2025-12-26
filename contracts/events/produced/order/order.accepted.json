@@ -1,0 +1,78 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://dispatch.arch/schemas/events/produced/order/order.accepted.json",
+  "title": "Order Accepted Event",
+  "description": "FULL PAYLOAD event: Rider-facing event published when rider accepts assigned order (includes complete order_details)",
+  "type": "object",
+  "required": [
+    "event_type",
+    "event_version",
+    "event_id",
+    "dispatch_order_id",
+    "client_order_id",
+    "rider_id",
+    "state",
+    "order_details",
+    "timestamp",
+    "traceparent"
+  ],
+  "properties": {
+    "event_type": {
+      "type": "string",
+      "const": "order.accepted",
+      "description": "Event type discriminator"
+    },
+    "event_version": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "Event schema version for evolution (v1.0 = Rider Payload Contract compliant)"
+    },
+    "event_id": {
+      "type": "string",
+      "format": "uuid",
+      "description": "Unique event identifier for deduplication"
+    },
+    "dispatch_order_id": {
+      "type": "string",
+      "description": "Order identifier in human-readable format (canonical ID)"
+    },
+    "client_order_id": {
+      "type": "string",
+      "description": "Client-facing order identifier (pass-through from order creation)"
+    },
+    "rider_id": {
+      "type": "string",
+      "description": "Assigned rider identifier"
+    },
+    "state": {
+      "type": "string",
+      "const": "ACCEPTED",
+      "description": "Order state (canonical state machine value)"
+    },
+    "quote_id": {
+      "type": "string",
+      "format": "uuid",
+      "description": "Associated quote ID for correlation"
+    },
+    "client_id": {
+      "type": "string",
+      "format": "uuid",
+      "description": "Client identifier for billing context"
+    },
+    "order_details": {
+      "$ref": "../order_details.json",
+      "description": "FR-compliant order details object (REQUIRED for FULL payload events)"
+    },
+    "traceparent": {
+      "type": "string",
+      "pattern": "^00-[0-9a-f]{32}-[0-9a-f]{16}-[0-9a-f]{2}$",
+      "description": "W3C traceparent header for distributed tracing"
+    },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Event publication timestamp in UTC"
+    }
+  },
+  "additionalProperties": false
+}

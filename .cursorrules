@@ -1,0 +1,260 @@
+# Cursor Development Rules
+
+## 1. Code Quality & Structure
+
+### File/Package Rules
+
+- Keep packages small and domain-focused (handlers, services, repository, clients, utils, config).
+
+- No cross-package circular imports.
+
+- Never expose internal structures across layers — use DTOs.
+
+- Avoid "God files" — split handlers/services logically.
+
+### DRY Principle
+
+- Do not violate DRY (Don't Repeat Yourself) principle.
+
+- Extract common logic into reusable functions, utilities, or shared packages.
+
+- Refactor duplicated code into shared components before adding new features.
+
+- When you find yourself copying code, stop and create a reusable abstraction instead.
+
+## 2. Keep every function under 20 lines.
+
+### Function/Method Rules
+
+Functions must be:
+
+- < 20–25 lines
+
+- Single-responsibility
+
+- Named with verbs for actions (GetRider, ProcessCancel, ValidateOTP)
+
+- Follow PEP 8 analogs for Go: clear naming, consistent formatting, explicit error handling.
+
+## 3. Architecture & Patterns
+
+- Follow Clean Architecture layering.
+
+  - Handlers: validate input, invoke services, shape HTTP responses.
+
+  - Services: contain business logic, orchestration, integrations.
+
+  - Utils: shared helpers only (serialization, validation, adapters).
+
+- Enforce dependency injection: handlers receive services through constructors; services receive repositories/clients the same way.
+
+- Maintain single responsibility per component; no mixed concerns.
+
+- Centralize shared logic (validation, formatting) instead of duplicating.
+
+- Use Dependency Injection for services
+
+## 4. Observability
+
+- Logging Requirements: Log level: INFO for user actions, WARN for retries, ERROR for failures
+
+- Only one layer should log the error (ideally the handler or an infra boundary)
+
+- Avoid: "Logging AND returning" (double logging)
+
+## 5. Maintainability
+
+- Consistent handler/service structure across all modules.
+
+- Modular layout for easy replacement of individual endpoints or integrations.
+
+- Reuse helpers for date validation, amount checks, and error formatting.
+
+- Ensure each component is independently testable
+
+## 6. Follow strict Test Driven Development principles:
+
+### TDD + Build Rules
+
+All implementation must follow TDD (Test Driven Development):
+
+For each requirement/feature:
+
+- Follow existing patterns, naming conventions, and architecture
+
+- Write/extend tests first
+
+- Identify or create the correct test file(s) following existing naming and structure
+
+- Run tests and ensure green
+
+- Never leave the repo in a broken state between steps
+
+- Once tests pass, that feature/requirement is considered implemented for this iteration
+
+- After each successful test run, the repo must be in a buildable and working state
+
+- Only then, move to the next feature
+
+- Implementation must be incremental
+
+### Testing Principles
+
+- Write test before developments
+
+- Use descriptive test names
+
+- Mock all external dependencies
+
+- No real network / no real DB calls
+
+Cover all scenarios:
+
+- success case
+
+- missing headers
+
+- invalid signature
+
+- malformed JSON
+
+- validation failure
+
+- service failure
+
+- correct 200 response
+
+## 7. Go Modules & Dependencies
+
+- Keep go modules clean: `go mod tidy`
+
+- Pin versions carefully (no `-latest`)
+
+- Avoid too many third-party dependencies
+
+## 8. Error Handling
+
+- Always wrap errors using `%w` so the upstream layer can unwrap and inspect the original cause
+
+- Only one layer should log the error (ideally the handler or an infra boundary)
+
+- Avoid: "Logging AND returning" (double logging)
+
+## 9. Context Management
+
+- Never store context inside structs
+
+## General Rule – No Hardcoded Business Values
+
+Never hardcode any business logic values in the codebase.
+
+If you're adding a fallback value or assuming a constant, ALWAYS ask
+
+## NOTE 
+
+# Order Service – Handler & Orchestration Rules
+
+- Each consumed event MUST have its own dedicated handler file.
+- Event handlers MUST NOT publish events.
+- Event handlers MUST NOT call gRPC directly.
+- gRPC clients MUST NOT emit events.
+- Only the service layer may orchestrate event publishing and external calls.
+
+
+## Build & Test Expectations
+
+- Before sharing changes, run `go build ./...` from the repo root.
+
+- Execute the full test suite 
+- Share both build and test results (pass/fail, counts, and any errors) in your update
+
+## 10. God File Prevention & Event-Oriented Services (STRICT)
+
+### 10.1 Definition of a God File (Disallowed)
+
+A file is considered a God file and MUST NOT be created or extended if it:
+
+- Handles more than one event type or business flow
+- Contains logic for multiple domain responsibilities (e.g., quote + order + lifecycle)
+- Exceeds 200 lines of code
+- Contains multiple unrelated state transitions
+- Grows incrementally without logical separation (“just add one more method” anti-pattern)
+
+If a file approaches these limits, it must be split immediately before adding new logic.
+
+### 10.2 Mandatory Event-Based File Ownership
+
+- Each consumed event MUST have its own dedicated service handler file.
+- File name MUST clearly reflect the event responsibility.
+
+### 10.3 Service Layer Rules (Non-Negotiable)
+
+Service files:
+
+- ≤ 200 LOC
+- Single event responsibility
+- Business logic only
+
+Services may:
+
+- Call repositories
+- Call clients
+- Publish events
+
+Services MUST NOT:
+
+- Route events
+- Parse transport payloads
+- Handle multiple event families
+
+### 10.4 Handler Layer Enforcement
+
+Each consumed event:
+
+- MUST map to exactly one handler
+- MUST delegate to exactly one service
+
+Handlers:
+
+- Validate input
+- Invoke service
+- Return result
+
+Handlers MUST NOT:
+
+- Contain business logic
+- Publish events
+- Call gRPC directly
+
+### 10.5 Facade Pattern for Large Domains (Required)
+
+When a domain has multiple event handlers:
+
+- A thin facade MAY exist.
+
+Facade MUST:
+
+- Only delegate
+- Contain zero business logic
+- Be ≤ 50 LOC
+
+### 10.7 No “Utility Dumping”
+
+Utility packages MUST:
+
+- Be domain-agnostic
+- Contain pure, reusable helpers
+
+Business logic MUST NOT be moved to `utils/` to bypass file size rules.
+
+### 10.8 Enforcement Thresholds
+
+| Rule                      | Limit        |
+|---------------------------|-------------|
+| Max service file size     | 200 LOC     |
+| Max function size         | 20–25 LOC   |
+| Responsibilities per file | 1 event family |
+| Logging layers            | 1 layer only |
+
+Violation of any threshold requires refactor before proceeding.
+

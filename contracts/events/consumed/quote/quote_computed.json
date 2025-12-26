@@ -1,0 +1,101 @@
+{
+  "$id": "https://dispatch.arch/schemas/events/v1/quote_computed.json",
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "QuoteComputedEvent",
+  "description": "Event published by Quote Service when price computation completes. QUOTE_COMPUTED for /search flow (consumed by UOIS), REVALIDATION_QUOTE_COMPUTED for /init revalidation flow (consumed by Order Service).",
+  "type": "object",
+  "required": [
+    "event_type",
+    "search_id",
+    "price",
+    "ttl",
+    "serviceable",
+    "timestamp"
+  ],
+  "properties": {
+    "event_type": {
+      "type": "string",
+      "enum": ["QUOTE_COMPUTED", "REVALIDATION_QUOTE_COMPUTED"],
+      "description": "Event type discriminator. QUOTE_COMPUTED for /search flow (consumed by UOIS), REVALIDATION_QUOTE_COMPUTED for /init revalidation flow (consumed by Order Service)."
+    },
+    "search_id": {
+      "type": "string",
+      "format": "uuid",
+      "description": "Serviceability ID (exact same search_id UOIS generated). Single source of truth for correlation and idempotency. Never change it."
+    },
+    "price": {
+      "type": "object",
+      "required": ["value", "currency"],
+      "description": "Structured price object. Value MUST be numeric (no currency symbol). Formatted strings (e.g., '₹58') should only be used in UI layers.",
+      "properties": {
+        "value": {
+          "type": "number",
+          "minimum": 0,
+          "description": "Price value as a decimal number (e.g., 58.00). Represents total price = base price + pickup fee/surge. MUST be numeric, not formatted string."
+        },
+        "currency": {
+          "type": "string",
+          "minLength": 3,
+          "maxLength": 3,
+          "pattern": "^[A-Z]{3}$",
+          "description": "ISO 4217 currency code (e.g., 'INR', 'USD')."
+        }
+      },
+      "additionalProperties": false
+    },
+    "ttl": {
+      "type": "string",
+      "pattern": "^PT[0-9]+[SMHD]$",
+      "description": "Time-to-live as ISO 8601 duration string. QUOTE_COMPUTED: 'PT10M' (10 minutes). REVALIDATION_QUOTE_COMPUTED: 'PT15M' (15 minutes)."
+    },
+    "ttl_seconds": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Time-to-live in seconds. QUOTE_COMPUTED: 600. REVALIDATION_QUOTE_COMPUTED: 900. Recommended for easy numeric checks."
+    },
+    "serviceable": {
+      "type": "boolean",
+      "description": "Passthrough field from SERVICEABILITY_FOUND/REVALIDATION_FOUND event. Location Service is the source of truth for serviceability. Quote Service MUST pass this through unchanged. REQUIRED for UOIS to compose /on_search response. If false, Quote Service should still publish QUOTE_COMPUTED (or QUOTE_ERROR) so UOIS can send proper failure response."
+    },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Event publication timestamp in UTC (ISO 8601)."
+    },
+    "eta_origin": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Estimated time of arrival at pickup as ISO 8601 timestamp (e.g., '2024-01-15T14:30:00Z'). REQUIRED/RECOMMENDED: Pass-through field from SERVICEABILITY_FOUND/REVALIDATION_FOUND event. Location Service is the source of truth. Quote Service MUST pass this through unchanged. Include to help UOIS map to /on_search response."
+    },
+    "eta_destination": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Estimated time of arrival at drop as ISO 8601 timestamp (e.g., '2024-01-15T14:45:00Z'). REQUIRED/RECOMMENDED: Pass-through field from SERVICEABILITY_FOUND/REVALIDATION_FOUND event. Location Service is the source of truth. Quote Service MUST pass this through unchanged. Include to help UOIS compose /on_search response."
+    },
+    "distance_origin_to_destination": {
+      "type": "number",
+      "minimum": 0,
+      "description": "Route distance from pickup to drop in kilometers. Optional: Pass-through field from SERVICEABILITY_FOUND/REVALIDATION_FOUND event. Included for convenience and validation."
+    },
+    "origin_timestamp": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Timestamp when the original /search request was initiated. Used for correlation and stale request detection."
+    },
+    "traceparent": {
+      "type": "string",
+      "pattern": "^00-[0-9a-f]{32}-[0-9a-f]{16}-[0-9a-f]{2}$",
+      "description": "W3C traceparent header for distributed tracing (format: 00-<trace-id>-<span-id>-<flags>). REQUIRED for end-to-end observability. Pass-through from SERVICEABILITY_FOUND/REVALIDATION_FOUND event. Quote Service MUST propagate unchanged to maintain trace continuity."
+    },
+    "trace_id": {
+      "type": "string",
+      "description": "Distributed tracing identifier (extracted from traceparent for convenience). Optional but RECOMMENDED. Propagated from UOIS Gateway through Location Service. Used for logging and correlation alongside search_id."
+    },
+    "metadata": {
+      "type": "object",
+      "additionalProperties": true,
+      "description": "Optional additional metadata. RECOMMENDED: Include traceparent, trace_id, rate_card_id, zone_id for observability and debugging."
+    }
+  },
+  "additionalProperties": false
+}
