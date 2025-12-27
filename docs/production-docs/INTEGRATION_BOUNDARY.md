@@ -3,6 +3,8 @@
 ## Overview
 UOIS Gateway is a middleware service that acts as a protocol translation and routing layer between external ONDC network participants and internal dispatch services. **NOT a source of truth for business logic, pricing, or order lifecycle management.**
 
+**Critical Boundary Rule**: Order Service must never depend on ONDC identifiers. ONDC `order.id` (seller-generated) is created by UOIS Gateway only after order confirmation; Order Service operates exclusively with internal identifiers (`dispatch_order_id`).
+
 **Communication Patterns:**
 - **Event-Driven (Async)**: Redis Streams for service-to-service events
 - **Synchronous (Sync)**: 
@@ -111,7 +113,8 @@ UOIS Gateway is a middleware service that acts as a protocol translation and rou
 
 - **`CONFIRM_REQUESTED`** → Stream: `stream.uois.confirm_requested`
   - Triggers: Order creation and rider assignment for `/confirm` flow
-  - Payload: quote_id, client_id, client_order_id, payment_info, traceparent
+  - Payload: quote_id, client_id, payment_info, traceparent
+  - **Note**: ONDC `order.id` (seller-generated) is created by UOIS Gateway only after `ORDER_CONFIRMED` event is received; Order Service never receives or depends on ONDC identifiers
 
 ### Event Producer Diagram
 
@@ -372,7 +375,8 @@ UOIS Gateway exposes **HTTP REST API** for ONDC-compliant endpoints:
 **Order Mapping Deduplication:**
 - `search_id` → `quote_id` mapping (idempotent)
 - `quote_id` → `dispatch_order_id` mapping (idempotent)
-- `client_order_id` → `dispatch_order_id` mapping (idempotent)
+- `order.id` (ONDC) → `dispatch_order_id` mapping (idempotent, post-confirmation only)
+- **Note**: These mappings coexist; none of these identifiers replace or supersede another
 
 ### Stream Naming Convention
 
@@ -436,7 +440,7 @@ ONDC Client → UOIS Gateway HTTP → Immediate ACK
 ```
 ONDC Client → UOIS Gateway HTTP → Immediate ACK
                 ↓
-         Resolve client_order_id → dispatch_order_id
+         Resolve order.id (ONDC) → dispatch_order_id
                 ↓
          Call Order Service gRPC
                 ↓

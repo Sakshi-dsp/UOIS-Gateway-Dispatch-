@@ -10,27 +10,30 @@ import (
 )
 
 type Config struct {
-	Server    ServerConfig
-	PostgresE PostgresConfig
-	Redis     RedisConfig
-	Order     OrderConfig
-	Admin     AdminConfig
-	Streams   StreamsConfig
-	TTL       TTLConfig
-	Retry     RetryConfig
-	Callback  CallbackConfig
-	ONDC      ONDCConfig
-	Zendesk   ZendeskConfig
-	Logging   LoggingConfig
-	Tracing   TracingConfig
-	RateLimit RateLimitConfig
+	ServiceName string
+	Env         string
+	Server      ServerConfig
+	PostgresE   PostgresConfig
+	Redis       RedisConfig
+	Order       OrderConfig
+	Admin       AdminConfig
+	Streams     StreamsConfig
+	TTL         TTLConfig
+	Retry       RetryConfig
+	Callback    CallbackConfig
+	ONDC        ONDCConfig
+	Zendesk     ZendeskConfig
+	Logging     LoggingConfig
+	Tracing     TracingConfig
+	RateLimit   RateLimitConfig
 }
 
 type ServerConfig struct {
-	Port         int
-	Host         string
-	ReadTimeout  time.Duration
-	WriteTimeout time.Duration
+	Port            int
+	Host            string
+	ReadTimeout     time.Duration
+	WriteTimeout    time.Duration
+	ShutdownTimeout time.Duration
 }
 
 type PostgresConfig struct {
@@ -46,14 +49,15 @@ type PostgresConfig struct {
 }
 
 type RedisConfig struct {
-	Host         string
-	Port         int
-	Password     string
-	DB           int
-	TLS          bool
-	KeyPrefix    string
-	PoolSize     int
-	MinIdleConns int
+	Host          string
+	Port          int
+	Password      string
+	DB            int
+	TLS           bool
+	KeyPrefix     string
+	PoolSize      int
+	MinIdleConns  int
+	StreamBlockMS int // Block duration in milliseconds for XREADGROUP
 }
 
 type OrderConfig struct {
@@ -111,12 +115,23 @@ type CallbackConfig struct {
 }
 
 type ONDCConfig struct {
+	Domain             string // ONDC domain (e.g., "nic2004:60232")
+	CoreVersion        string // ONDC core version (e.g., "1.2.0")
+	Country            string // ONDC country (e.g., "IND")
+	CityCode           string // ONDC city code
 	NetworkRegistryURL string
+	RegistryCacheTTL   int // Registry cache TTL in seconds
 	PrivateKeyPath     string
 	PublicKeyPath      string
 	TimestampWindow    int
 	SubscriberID       string
+	SubscriberURL      string // ONDC subscriber URL
 	UkID               string
+	ProviderID         string // Stable provider identifier (e.g., "P1")
+	BPPID              string // BPP ID (ONDC-registered Seller NP identity)
+	BPPURI             string // BPP URI
+	BPPName            string // BPP display name
+	BPPTermsURL        string // Static terms URL
 }
 
 type ZendeskConfig struct {
@@ -135,6 +150,7 @@ type TracingConfig struct {
 	Enabled        bool
 	SampleRate     float64
 	JaegerEndpoint string
+	ServiceName    string // OTEL service name
 }
 
 type RateLimitConfig struct {
@@ -167,6 +183,15 @@ func LoadConfig() (*Config, error) {
 	viper.SetDefault("RATE_LIMIT_REQUESTS_PER_MINUTE", 60)
 	viper.SetDefault("RATE_LIMIT_BURST", 10)
 	viper.SetDefault("RATE_LIMIT_WINDOW_SECONDS", 60)
+	viper.SetDefault("SERVICE_NAME", "uois-gateway")
+	viper.SetDefault("ENV", "local")
+	viper.SetDefault("SHUTDOWN_TIMEOUT", "30s")
+	viper.SetDefault("ONDC_DOMAIN", "nic2004:60232")
+	viper.SetDefault("ONDC_CORE_VERSION", "1.2.0")
+	viper.SetDefault("ONDC_COUNTRY", "IND")
+	viper.SetDefault("REGISTRY_CACHE_TTL_SECONDS", 3600) // 1 hour
+	viper.SetDefault("REDIS_STREAM_BLOCK_MS", 5000)      // 5 seconds
+	viper.SetDefault("OTEL_SERVICE_NAME", "uois-gateway")
 
 	readTimeout, err := parseDurationWithDefault(viper.GetString("SERVER_READ_TIMEOUT"), 10*time.Second)
 	if err != nil {
@@ -176,13 +201,20 @@ func LoadConfig() (*Config, error) {
 	if err != nil {
 		return nil, fmt.Errorf("invalid SERVER_WRITE_TIMEOUT: %w", err)
 	}
+	shutdownTimeout, err := parseDurationWithDefault(viper.GetString("SHUTDOWN_TIMEOUT"), 30*time.Second)
+	if err != nil {
+		return nil, fmt.Errorf("invalid SHUTDOWN_TIMEOUT: %w", err)
+	}
 
 	cfg := &Config{
+		ServiceName: viper.GetString("SERVICE_NAME"),
+		Env:         viper.GetString("ENV"),
 		Server: ServerConfig{
-			Port:         viper.GetInt("SERVER_PORT"),
-			Host:         viper.GetString("SERVER_HOST"),
-			ReadTimeout:  readTimeout,
-			WriteTimeout: writeTimeout,
+			Port:            viper.GetInt("SERVER_PORT"),
+			Host:            viper.GetString("SERVER_HOST"),
+			ReadTimeout:     readTimeout,
+			WriteTimeout:    writeTimeout,
+			ShutdownTimeout: shutdownTimeout,
 		},
 		PostgresE: func() PostgresConfig {
 			connMaxLifetime, _ := parseDurationWithDefault(viper.GetString("POSTGRES_E_CONNECTION_MAX_LIFETIME"), time.Hour)
@@ -199,14 +231,15 @@ func LoadConfig() (*Config, error) {
 			}
 		}(),
 		Redis: RedisConfig{
-			Host:         viper.GetString("REDIS_HOST"),
-			Port:         viper.GetInt("REDIS_PORT"),
-			Password:     viper.GetString("REDIS_PASSWORD"),
-			DB:           viper.GetInt("REDIS_DB"),
-			TLS:          viper.GetBool("REDIS_TLS"),
-			KeyPrefix:    viper.GetString("REDIS_KEY_PREFIX"),
-			PoolSize:     viper.GetInt("REDIS_POOL_SIZE"),
-			MinIdleConns: viper.GetInt("REDIS_MIN_IDLE_CONNS"),
+			Host:          viper.GetString("REDIS_HOST"),
+			Port:          viper.GetInt("REDIS_PORT"),
+			Password:      viper.GetString("REDIS_PASSWORD"),
+			DB:            viper.GetInt("REDIS_DB"),
+			TLS:           viper.GetBool("REDIS_TLS"),
+			KeyPrefix:     viper.GetString("REDIS_KEY_PREFIX"),
+			PoolSize:      viper.GetInt("REDIS_POOL_SIZE"),
+			MinIdleConns:  viper.GetInt("REDIS_MIN_IDLE_CONNS"),
+			StreamBlockMS: viper.GetInt("REDIS_STREAM_BLOCK_MS"),
 		},
 		Order: func() OrderConfig {
 			orderTimeout, err := parseDurationWithDefault(viper.GetString("ORDER_SERVICE_GRPC_TIMEOUT"), 5*time.Second)
@@ -275,12 +308,23 @@ func LoadConfig() (*Config, error) {
 			DLQEnabled:         viper.GetBool("CALLBACK_DLQ_ENABLED"),
 		},
 		ONDC: ONDCConfig{
+			Domain:             viper.GetString("ONDC_DOMAIN"),
+			CoreVersion:        viper.GetString("ONDC_CORE_VERSION"),
+			Country:            viper.GetString("ONDC_COUNTRY"),
+			CityCode:           viper.GetString("ONDC_CITY_CODE"),
 			NetworkRegistryURL: viper.GetString("ONDC_NETWORK_REGISTRY_URL"),
+			RegistryCacheTTL:   viper.GetInt("REGISTRY_CACHE_TTL_SECONDS"),
 			PrivateKeyPath:     viper.GetString("ONDC_PRIVATE_KEY_PATH"),
 			PublicKeyPath:      viper.GetString("ONDC_PUBLIC_KEY_PATH"),
 			TimestampWindow:    viper.GetInt("ONDC_TIMESTAMP_WINDOW"),
 			SubscriberID:       viper.GetString("ONDC_SUBSCRIBER_ID"),
+			SubscriberURL:      viper.GetString("ONDC_SUBSCRIBER_URL"),
 			UkID:               viper.GetString("ONDC_UK_ID"),
+			ProviderID:         viper.GetString("ONDC_PROVIDER_ID"),
+			BPPID:              viper.GetString("ONDC_BPP_ID"),
+			BPPURI:             viper.GetString("ONDC_BPP_URI"),
+			BPPName:            viper.GetString("ONDC_BPP_NAME"),
+			BPPTermsURL:        viper.GetString("ONDC_BPP_TERMS_URL"),
 		},
 		Zendesk: ZendeskConfig{
 			APIURL:        viper.GetString("ZENDESK_API_URL"),
@@ -296,6 +340,7 @@ func LoadConfig() (*Config, error) {
 			Enabled:        viper.GetBool("TRACING_ENABLED"),
 			SampleRate:     viper.GetFloat64("TRACING_SAMPLE_RATE"),
 			JaegerEndpoint: viper.GetString("JAEGER_ENDPOINT"),
+			ServiceName:    viper.GetString("OTEL_SERVICE_NAME"),
 		},
 		RateLimit: RateLimitConfig{
 			Enabled:           viper.GetBool("RATE_LIMIT_ENABLED"),
@@ -405,6 +450,15 @@ func (c *Config) validateONDC() error {
 	}
 	if c.ONDC.UkID == "" {
 		return fmt.Errorf("uk id is required")
+	}
+	if c.ONDC.ProviderID == "" {
+		return fmt.Errorf("provider id is required")
+	}
+	if c.ONDC.BPPID == "" {
+		return fmt.Errorf("bpp id is required")
+	}
+	if c.ONDC.BPPURI == "" {
+		return fmt.Errorf("bpp uri is required")
 	}
 	return nil
 }

@@ -150,111 +150,40 @@ Never hardcode any business logic values in the codebase.
 
 If you're adding a fallback value or assuming a constant, ALWAYS ask
 
-## NOTE 
+## 11. ID Domain Isolation & Mapping Prohibition (CRITICAL)
 
-# Order Service – Handler & Orchestration Rules
+- UOIS Gateway must **NEVER hardcode any business values**, identifiers, enums, states, IDs, or domain assumptions.
+- UOIS Gateway must **NEVER introduce fallback values** for any business-critical field.
+  - If a required value is missing or invalid → fail fast.
+  - Silent defaults, assumptions, or inferred values are strictly forbidden.
 
-- Each consumed event MUST have its own dedicated handler file.
-- Event handlers MUST NOT publish events.
-- Event handlers MUST NOT call gRPC directly.
-- gRPC clients MUST NOT emit events.
-- Only the service layer may orchestrate event publishing and external calls.
+- UOIS Gateway is **ONLY responsible for field name and schema mapping** between protocols.
+  - Example: ONDC/Beckn field → internal contract field
+  - This applies to **keys, structure, and format only**
 
+- **ID mapping is strictly forbidden** in UOIS Gateway.
+  - Client / ONDC IDs and Dispatch internal IDs belong to **different domains**
+  - IDs must never be:
+    - reused
+    - derived
+    - translated
+    - inferred
+    - equated
+    - hardcoded
 
-## Build & Test Expectations
+- UOIS Gateway may **store ID references only for routing and correlation**, never for semantic meaning.
+  - Stored references do NOT imply equality or ownership
+  - No ID transformation logic is allowed
 
-- Before sharing changes, run `go build ./...` from the repo root.
+- ID ownership rules:
+  - UOIS Gateway **generates only IDs it owns** (e.g., search_id, trace_id, event_id)
+  - Client-provided IDs are **passed through unchanged**
+  - Internal service IDs are **accepted only from owning services**
 
-- Execute the full test suite 
-- Share both build and test results (pass/fail, counts, and any errors) in your update
+- Any code that:
+  - derives an ID from payload fields
+  - reuses protocol IDs as business IDs
+  - assumes equivalence across domains  
+  is considered a **hard violation of architecture rules** and must be rejected in review.
 
-## 10. God File Prevention & Event-Oriented Services (STRICT)
-
-### 10.1 Definition of a God File (Disallowed)
-
-A file is considered a God file and MUST NOT be created or extended if it:
-
-- Handles more than one event type or business flow
-- Contains logic for multiple domain responsibilities (e.g., quote + order + lifecycle)
-- Exceeds 200 lines of code
-- Contains multiple unrelated state transitions
-- Grows incrementally without logical separation (“just add one more method” anti-pattern)
-
-If a file approaches these limits, it must be split immediately before adding new logic.
-
-### 10.2 Mandatory Event-Based File Ownership
-
-- Each consumed event MUST have its own dedicated service handler file.
-- File name MUST clearly reflect the event responsibility.
-
-### 10.3 Service Layer Rules (Non-Negotiable)
-
-Service files:
-
-- ≤ 200 LOC
-- Single event responsibility
-- Business logic only
-
-Services may:
-
-- Call repositories
-- Call clients
-- Publish events
-
-Services MUST NOT:
-
-- Route events
-- Parse transport payloads
-- Handle multiple event families
-
-### 10.4 Handler Layer Enforcement
-
-Each consumed event:
-
-- MUST map to exactly one handler
-- MUST delegate to exactly one service
-
-Handlers:
-
-- Validate input
-- Invoke service
-- Return result
-
-Handlers MUST NOT:
-
-- Contain business logic
-- Publish events
-- Call gRPC directly
-
-### 10.5 Facade Pattern for Large Domains (Required)
-
-When a domain has multiple event handlers:
-
-- A thin facade MAY exist.
-
-Facade MUST:
-
-- Only delegate
-- Contain zero business logic
-- Be ≤ 50 LOC
-
-### 10.7 No “Utility Dumping”
-
-Utility packages MUST:
-
-- Be domain-agnostic
-- Contain pure, reusable helpers
-
-Business logic MUST NOT be moved to `utils/` to bypass file size rules.
-
-### 10.8 Enforcement Thresholds
-
-| Rule                      | Limit        |
-|---------------------------|-------------|
-| Max service file size     | 200 LOC     |
-| Max function size         | 20–25 LOC   |
-| Responsibilities per file | 1 event family |
-| Logging layers            | 1 layer only |
-
-Violation of any threshold requires refactor before proceeding.
 
