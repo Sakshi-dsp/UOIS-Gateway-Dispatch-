@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"uois-gateway/internal/models"
+	"uois-gateway/internal/services/audit"
 	"uois-gateway/internal/utils"
 	"uois-gateway/pkg/errors"
 
@@ -25,6 +26,7 @@ type InitHandler struct {
 	idempotencyService IdempotencyService
 	orderServiceClient OrderServiceClient
 	orderRecordService OrderRecordService
+	auditService       AuditService
 	providerID         string // Stable provider identifier (e.g., "P1")
 	bppID              string // BPP ID (ONDC-registered Seller NP identity)
 	bppURI             string // BPP URI
@@ -39,6 +41,7 @@ func NewInitHandler(
 	idempotencyService IdempotencyService,
 	orderServiceClient OrderServiceClient,
 	orderRecordService OrderRecordService,
+	auditService AuditService,
 	providerID string,
 	bppID string,
 	bppURI string,
@@ -51,6 +54,7 @@ func NewInitHandler(
 		idempotencyService: idempotencyService,
 		orderServiceClient: orderServiceClient,
 		orderRecordService: orderRecordService,
+		auditService:       auditService,
 		providerID:         providerID,
 		bppID:              bppID,
 		bppURI:             bppURI,
@@ -205,6 +209,22 @@ func (h *InitHandler) HandleInit(c *gin.Context) {
 	// Store idempotency (marshal to preserve byte-exactness for ONDC signatures)
 	responseBytes, _ := json.Marshal(response)
 	_ = h.idempotencyService.StoreIdempotency(ctx, idempotencyKey, responseBytes, 24*time.Hour)
+
+	// Get client ID for audit logging
+	client, _ := c.Get("client")
+	var clientID string
+	if cl, ok := client.(*models.Client); ok {
+		clientID = cl.ID
+	}
+
+	// Extract quote_id from quoteEvent for audit logging
+	var quoteID string
+	if quoteCreated, ok := quoteEvent.(*models.QuoteCreatedEvent); ok {
+		quoteID = quoteCreated.QuoteID
+	}
+
+	// Log request/response audit
+	h.logRequestResponse(ctx, &req, response, nil, searchID, quoteID, clientID, traceID)
 
 	// Send callback asynchronously (pass fulfillmentID for stable reuse)
 	go h.sendInitCallback(ctx, &req, quoteEvent, fulfillmentID, traceID)
@@ -435,6 +455,9 @@ func (h *InitHandler) sendInitCallback(ctx context.Context, req *models.ONDCRequ
 
 	if err := h.callbackService.SendCallback(ctx, callbackURL, callbackPayload); err != nil {
 		h.logger.Error("failed to send /on_init callback", zap.Error(err), zap.String("trace_id", traceID), zap.String("callback_url", callbackURL))
+		h.logCallbackDelivery(ctx, req.Context.TransactionID, callbackURL, 1, "failed", err.Error())
+	} else {
+		h.logCallbackDelivery(ctx, req.Context.TransactionID, callbackURL, 1, "success", "")
 	}
 }
 
@@ -535,19 +558,92 @@ func (h *InitHandler) respondACK(c *gin.Context, response interface{}) {
 }
 
 func (h *InitHandler) respondNACK(c *gin.Context, err *errors.DomainError) {
-	var ctx models.ONDCContext
-	if req, ok := c.Get("ondc_request"); ok {
-		if ondcReq, ok := req.(*models.ONDCRequest); ok {
-			ctx = ondcReq.Context
+	ctx := c.Request.Context()
+	traceID := utils.ExtractTraceID(utils.EnsureTraceparent(c.GetHeader("traceparent")))
+
+	var ondcCtx models.ONDCContext
+	var req *models.ONDCRequest
+	if reqVal, ok := c.Get("ondc_request"); ok {
+		if ondcReq, ok := reqVal.(*models.ONDCRequest); ok {
+			ondcCtx = ondcReq.Context
+			req = ondcReq
 		}
 	}
 
-	c.JSON(errors.GetHTTPStatus(err), models.ONDCResponse{
-		Context: ctx,
+	response := models.ONDCResponse{
+		Context: ondcCtx,
 		Error: &models.ONDCError{
 			Type:    "CONTEXT_ERROR",
 			Code:    fmt.Sprintf("%d", err.Code),
 			Message: map[string]string{"en": err.Message},
 		},
-	})
+	}
+
+	// Log request/response audit
+	if req != nil {
+		client, _ := c.Get("client")
+		var clientID string
+		if cl, ok := client.(*models.Client); ok {
+			clientID = cl.ID
+		}
+		h.logRequestResponse(ctx, req, response, nil, "", "", clientID, traceID)
+	}
+
+	c.JSON(errors.GetHTTPStatus(err), response)
+}
+
+func (h *InitHandler) logRequestResponse(ctx context.Context, req *models.ONDCRequest, ackResponse interface{}, callbackPayload interface{}, searchID, quoteID, clientID, traceID string) {
+	if h.auditService == nil {
+		return
+	}
+
+	reqPayload := h.toMap(req)
+	ackPayload := h.toMap(ackResponse)
+	callbackPayloadMap := h.toMap(callbackPayload)
+
+	params := &audit.RequestResponseLogParams{
+		TransactionID:   req.Context.TransactionID,
+		MessageID:       req.Context.MessageID,
+		Action:          "init",
+		RequestPayload:  reqPayload,
+		ACKPayload:      ackPayload,
+		CallbackPayload: callbackPayloadMap,
+		TraceID:         traceID,
+		ClientID:        clientID,
+		SearchID:        searchID,
+		QuoteID:         quoteID,
+	}
+
+	_ = h.auditService.LogRequestResponse(ctx, params)
+}
+
+func (h *InitHandler) logCallbackDelivery(ctx context.Context, transactionID, callbackURL string, attemptNo int, status, errorMsg string) {
+	if h.auditService == nil {
+		return
+	}
+
+	params := &audit.CallbackDeliveryLogParams{
+		RequestID:   transactionID,
+		CallbackURL: callbackURL,
+		AttemptNo:   attemptNo,
+		Status:      status,
+		Error:       errorMsg,
+	}
+
+	_ = h.auditService.LogCallbackDelivery(ctx, params)
+}
+
+func (h *InitHandler) toMap(v interface{}) map[string]interface{} {
+	if v == nil {
+		return nil
+	}
+	data, err := json.Marshal(v)
+	if err != nil {
+		return nil
+	}
+	var result map[string]interface{}
+	if err := json.Unmarshal(data, &result); err != nil {
+		return nil
+	}
+	return result
 }

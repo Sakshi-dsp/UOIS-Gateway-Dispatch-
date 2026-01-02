@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"uois-gateway/internal/models"
+	"uois-gateway/internal/services/audit"
 	"uois-gateway/internal/utils"
 	"uois-gateway/pkg/errors"
 
@@ -22,6 +23,7 @@ type CancelHandler struct {
 	idempotencyService IdempotencyService
 	orderServiceClient OrderServiceClient
 	orderRecordService OrderRecordService
+	auditService       AuditService
 	bppID              string // BPP ID (ONDC-registered Seller NP identity)
 	bppURI             string // BPP URI
 	logger             *zap.Logger
@@ -33,6 +35,7 @@ func NewCancelHandler(
 	idempotencyService IdempotencyService,
 	orderServiceClient OrderServiceClient,
 	orderRecordService OrderRecordService,
+	auditService AuditService,
 	bppID string,
 	bppURI string,
 	logger *zap.Logger,
@@ -42,6 +45,7 @@ func NewCancelHandler(
 		idempotencyService: idempotencyService,
 		orderServiceClient: orderServiceClient,
 		orderRecordService: orderRecordService,
+		auditService:       auditService,
 		bppID:              bppID,
 		bppURI:             bppURI,
 		logger:             logger,
@@ -125,6 +129,9 @@ func (h *CancelHandler) HandleCancel(c *gin.Context) {
 	responseBytes, _ := json.Marshal(response)
 	_ = h.idempotencyService.StoreIdempotency(ctx, idempotencyKey, responseBytes, 24*time.Hour)
 
+	// Log request/response audit
+	h.logRequestResponse(ctx, &req, response, nil, orderRecord, clientID, traceID)
+
 	go h.sendCancelCallback(ctx, &req, orderRecord, traceID)
 
 	h.respondACK(c, response)
@@ -166,6 +173,9 @@ func (h *CancelHandler) sendCancelCallback(ctx context.Context, req *models.ONDC
 
 	if err := h.callbackService.SendCallback(ctx, callbackURL, callbackPayload); err != nil {
 		h.logger.Error("failed to send /on_cancel callback", zap.Error(err), zap.String("trace_id", traceID), zap.String("callback_url", callbackURL))
+		h.logCallbackDelivery(ctx, req.Context.TransactionID, callbackURL, 1, "failed", err.Error())
+	} else {
+		h.logCallbackDelivery(ctx, req.Context.TransactionID, callbackURL, 1, "success", "")
 	}
 }
 
@@ -230,19 +240,98 @@ func (h *CancelHandler) respondACK(c *gin.Context, response interface{}) {
 }
 
 func (h *CancelHandler) respondNACK(c *gin.Context, err *errors.DomainError) {
-	var ctx models.ONDCContext
-	if req, ok := c.Get("ondc_request"); ok {
-		if ondcReq, ok := req.(*models.ONDCRequest); ok {
-			ctx = ondcReq.Context
+	ctx := c.Request.Context()
+	traceID := utils.ExtractTraceID(utils.EnsureTraceparent(c.GetHeader("traceparent")))
+
+	var ondcCtx models.ONDCContext
+	var req *models.ONDCRequest
+	if reqVal, ok := c.Get("ondc_request"); ok {
+		if ondcReq, ok := reqVal.(*models.ONDCRequest); ok {
+			ondcCtx = ondcReq.Context
+			req = ondcReq
 		}
 	}
 
-	c.JSON(errors.GetHTTPStatus(err), models.ONDCResponse{
-		Context: ctx,
+	response := models.ONDCResponse{
+		Context: ondcCtx,
 		Error: &models.ONDCError{
 			Type:    "CONTEXT_ERROR",
 			Code:    fmt.Sprintf("%d", err.Code),
 			Message: map[string]string{"en": err.Message},
 		},
-	})
+	}
+
+	// Log request/response audit
+	if req != nil {
+		client, _ := c.Get("client")
+		var clientID string
+		if cl, ok := client.(*models.Client); ok {
+			clientID = cl.ID
+		}
+		h.logRequestResponse(ctx, req, response, nil, nil, clientID, traceID)
+	}
+
+	c.JSON(errors.GetHTTPStatus(err), response)
+}
+
+func (h *CancelHandler) logRequestResponse(ctx context.Context, req *models.ONDCRequest, ackResponse interface{}, callbackPayload interface{}, orderRecord *OrderRecord, clientID, traceID string) {
+	if h.auditService == nil {
+		return
+	}
+
+	reqPayload := h.toMap(req)
+	ackPayload := h.toMap(ackResponse)
+	callbackPayloadMap := h.toMap(callbackPayload)
+
+	var orderID, dispatchOrderID string
+	if orderRecord != nil {
+		orderID = orderRecord.OrderID
+		dispatchOrderID = orderRecord.DispatchOrderID
+	}
+
+	params := &audit.RequestResponseLogParams{
+		TransactionID:   req.Context.TransactionID,
+		MessageID:       req.Context.MessageID,
+		Action:          "cancel",
+		RequestPayload:  reqPayload,
+		ACKPayload:      ackPayload,
+		CallbackPayload: callbackPayloadMap,
+		TraceID:         traceID,
+		ClientID:        clientID,
+		OrderID:         orderID,
+		DispatchOrderID: dispatchOrderID,
+	}
+
+	_ = h.auditService.LogRequestResponse(ctx, params)
+}
+
+func (h *CancelHandler) logCallbackDelivery(ctx context.Context, transactionID, callbackURL string, attemptNo int, status, errorMsg string) {
+	if h.auditService == nil {
+		return
+	}
+
+	params := &audit.CallbackDeliveryLogParams{
+		RequestID:   transactionID,
+		CallbackURL: callbackURL,
+		AttemptNo:   attemptNo,
+		Status:      status,
+		Error:       errorMsg,
+	}
+
+	_ = h.auditService.LogCallbackDelivery(ctx, params)
+}
+
+func (h *CancelHandler) toMap(v interface{}) map[string]interface{} {
+	if v == nil {
+		return nil
+	}
+	data, err := json.Marshal(v)
+	if err != nil {
+		return nil
+	}
+	var result map[string]interface{}
+	if err := json.Unmarshal(data, &result); err != nil {
+		return nil
+	}
+	return result
 }

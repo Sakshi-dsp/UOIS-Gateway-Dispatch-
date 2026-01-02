@@ -122,7 +122,8 @@ func TestInitHandler_Success(t *testing.T) {
 	orderServiceClient := new(mockOrderServiceClient)
 	orderRecordService := new(mockOrderRecordService)
 
-	handler := NewInitHandler(eventPublisher, eventConsumer, callbackService, idempotencyService, orderServiceClient, orderRecordService, "P1", "test-bpp-id", "https://bpp.example.com", logger)
+	auditService := new(mockAuditService)
+	handler := NewInitHandler(eventPublisher, eventConsumer, callbackService, idempotencyService, orderServiceClient, orderRecordService, auditService, "P1", "test-bpp-id", "https://bpp.example.com", logger)
 
 	searchID := uuid.New().String()
 	transactionID := uuid.New().String()
@@ -256,7 +257,8 @@ func TestInitHandler_InvalidSearchID(t *testing.T) {
 	orderServiceClient := new(mockOrderServiceClient)
 	orderRecordService := new(mockOrderRecordService)
 
-	handler := NewInitHandler(eventPublisher, eventConsumer, callbackService, idempotencyService, orderServiceClient, orderRecordService, "P1", "test-bpp-id", "https://bpp.example.com", logger)
+	auditService := new(mockAuditService)
+	handler := NewInitHandler(eventPublisher, eventConsumer, callbackService, idempotencyService, orderServiceClient, orderRecordService, auditService, "P1", "test-bpp-id", "https://bpp.example.com", logger)
 
 	searchID := uuid.New().String()
 	transactionID := uuid.New().String()
@@ -334,7 +336,8 @@ func TestInitHandler_QuoteInvalidated(t *testing.T) {
 	orderServiceClient := new(mockOrderServiceClient)
 	orderRecordService := new(mockOrderRecordService)
 
-	handler := NewInitHandler(eventPublisher, eventConsumer, callbackService, idempotencyService, orderServiceClient, orderRecordService, "P1", "test-bpp-id", "https://bpp.example.com", logger)
+	auditService := new(mockAuditService)
+	handler := NewInitHandler(eventPublisher, eventConsumer, callbackService, idempotencyService, orderServiceClient, orderRecordService, auditService, "P1", "test-bpp-id", "https://bpp.example.com", logger)
 
 	searchID := uuid.New().String()
 	transactionID := uuid.New().String()

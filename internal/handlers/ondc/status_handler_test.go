@@ -27,8 +27,9 @@ func TestStatusHandler_Success(t *testing.T) {
 	idempotencyService := new(mockIdempotencyService)
 	orderServiceClient := new(mockOrderServiceClient)
 	orderRecordService := new(mockOrderRecordService)
+	auditService := new(mockAuditService)
 
-	handler := NewStatusHandler(callbackService, idempotencyService, orderServiceClient, orderRecordService, "test-bpp-id", "https://bpp.example.com", logger)
+	handler := NewStatusHandler(callbackService, idempotencyService, orderServiceClient, orderRecordService, auditService, "test-bpp-id", "https://bpp.example.com", logger)
 
 	clientOrderID := uuid.New().String()
 	dispatchOrderID := uuid.New().String()
@@ -119,7 +120,8 @@ func TestStatusHandler_OrderNotFound(t *testing.T) {
 	orderServiceClient := new(mockOrderServiceClient)
 	orderRecordService := new(mockOrderRecordService)
 
-	handler := NewStatusHandler(callbackService, idempotencyService, orderServiceClient, orderRecordService, "test-bpp-id", "https://bpp.example.com", logger)
+	auditService := new(mockAuditService)
+	handler := NewStatusHandler(callbackService, idempotencyService, orderServiceClient, orderRecordService, auditService, "test-bpp-id", "https://bpp.example.com", logger)
 
 	clientOrderID := uuid.New().String()
 	transactionID := uuid.New().String()

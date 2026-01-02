@@ -3,6 +3,8 @@ package ondc
 import (
 	"context"
 	"time"
+
+	"uois-gateway/internal/services/audit"
 )
 
 // EventPublisher publishes events to Redis streams
@@ -82,6 +84,12 @@ type OrderRecordService interface {
 	// Used to append newly generated identifiers to an existing order record.
 	// Existing identifiers must never be modified or replaced.
 	UpdateOrderRecord(ctx context.Context, record *OrderRecord) error
+}
+
+// AuditService provides audit logging functionality
+type AuditService interface {
+	LogRequestResponse(ctx context.Context, req *audit.RequestResponseLogParams) error
+	LogCallbackDelivery(ctx context.Context, req *audit.CallbackDeliveryLogParams) error
 }
 
 // OrderStatus represents order status from Order Service

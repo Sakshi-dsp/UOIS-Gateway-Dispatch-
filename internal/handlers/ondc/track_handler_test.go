@@ -25,8 +25,9 @@ func TestTrackHandler_Success(t *testing.T) {
 	idempotencyService := new(mockIdempotencyService)
 	orderServiceClient := new(mockOrderServiceClient)
 	orderRecordService := new(mockOrderRecordService)
+	auditService := new(mockAuditService)
 
-	handler := NewTrackHandler(callbackService, idempotencyService, orderServiceClient, orderRecordService, "test-bpp-id", "https://bpp.example.com", logger)
+	handler := NewTrackHandler(callbackService, idempotencyService, orderServiceClient, orderRecordService, auditService, "test-bpp-id", "https://bpp.example.com", logger)
 
 	clientOrderID := uuid.New().String()
 	dispatchOrderID := uuid.New().String()

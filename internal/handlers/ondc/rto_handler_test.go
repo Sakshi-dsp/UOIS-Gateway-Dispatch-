@@ -26,8 +26,9 @@ func TestRTOHandler_Success(t *testing.T) {
 	idempotencyService := new(mockIdempotencyService)
 	orderServiceClient := new(mockOrderServiceClient)
 	orderRecordService := new(mockOrderRecordService)
+	auditService := new(mockAuditService)
 
-	handler := NewRTOHandler(callbackService, idempotencyService, orderServiceClient, orderRecordService, "test-bpp-id", "https://bpp.example.com", logger)
+	handler := NewRTOHandler(callbackService, idempotencyService, orderServiceClient, orderRecordService, auditService, "test-bpp-id", "https://bpp.example.com", logger)
 
 	clientOrderID := uuid.New().String()
 	dispatchOrderID := uuid.New().String()

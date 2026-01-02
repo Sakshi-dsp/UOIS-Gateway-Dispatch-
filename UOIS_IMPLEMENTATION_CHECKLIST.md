@@ -78,51 +78,59 @@
 
 ### Schemas
 
-- [ ] `audit` - **NOT FOUND** (no migration files found)
-- [ ] `client_registry` - **NOT FOUND** (no migration files found)
-- [ ] `ondc_reference` - **NOT FOUND** (no migration files found)
+- [x] `audit` - ✅ **IMPLEMENTED** (migration: `001_create_audit_schema.sql`)
+- [x] `client_registry` - ✅ **MIGRATION EXISTS** (migration: `002_create_client_registry_schema.sql`) ⚠️ **CODE USES IN-MEMORY** (not DB-backed)
+- [x] `ondc_reference` - ✅ **MIGRATION EXISTS** (migration: `003_create_ondc_reference_schema.sql`) ⚠️ **CODE USES REDIS** (not DB-backed)
 
 ### Tables
 
 #### `audit.request_response_logs`
 
-- [ ] request_id - **NOT IMPLEMENTED** (no DB schema)
-- [ ] transaction_id - **NOT IMPLEMENTED** (no DB schema)
-- [ ] message_id - **NOT IMPLEMENTED** (no DB schema)
-- [ ] action - **NOT IMPLEMENTED** (no DB schema)
-- [ ] request_payload (JSONB) - **NOT IMPLEMENTED** (no DB schema)
-- [ ] ack_payload (JSONB) - **NOT IMPLEMENTED** (no DB schema)
-- [ ] callback_payload (JSONB) - **NOT IMPLEMENTED** (no DB schema)
-- [ ] trace_id - **NOT IMPLEMENTED** (no DB schema)
-- [ ] client_id - **NOT IMPLEMENTED** (no DB schema)
-- [ ] created_at - **NOT IMPLEMENTED** (no DB schema)
+- [x] request_id - ✅ **IMPLEMENTED** (migration + code: `audit_repository.go`)
+- [x] transaction_id - ✅ **IMPLEMENTED** (migration + code)
+- [x] message_id - ✅ **IMPLEMENTED** (migration + code)
+- [x] action - ✅ **IMPLEMENTED** (migration + code)
+- [x] request_payload (JSONB) - ✅ **IMPLEMENTED** (migration + code)
+- [x] ack_payload (JSONB) - ✅ **IMPLEMENTED** (migration + code)
+- [x] callback_payload (JSONB) - ✅ **IMPLEMENTED** (migration + code)
+- [x] trace_id - ✅ **IMPLEMENTED** (migration + code)
+- [x] client_id - ✅ **IMPLEMENTED** (migration + code)
+- [x] search_id - ✅ **IMPLEMENTED** (migration + code, bonus field)
+- [x] quote_id - ✅ **IMPLEMENTED** (migration + code, bonus field)
+- [x] order_id - ✅ **IMPLEMENTED** (migration + code, bonus field)
+- [x] dispatch_order_id - ✅ **IMPLEMENTED** (migration + code, bonus field)
+- [x] created_at - ✅ **IMPLEMENTED** (migration + code)
 
 #### `audit.callback_delivery_logs`
 
-- [ ] request_id - **NOT IMPLEMENTED** (no DB schema)
-- [ ] callback_url - **NOT IMPLEMENTED** (no DB schema)
-- [ ] attempt_no - **NOT IMPLEMENTED** (no DB schema)
-- [ ] status - **NOT IMPLEMENTED** (no DB schema)
-- [ ] error - **NOT IMPLEMENTED** (no DB schema)
-- [ ] created_at - **NOT IMPLEMENTED** (no DB schema)
+- [x] request_id - ✅ **IMPLEMENTED** (migration + code: `audit_repository.go`)
+- [x] callback_url - ✅ **IMPLEMENTED** (migration + code)
+- [x] attempt_no - ✅ **IMPLEMENTED** (migration + code)
+- [x] status - ✅ **IMPLEMENTED** (migration + code)
+- [x] error - ✅ **IMPLEMENTED** (migration + code)
+- [x] created_at - ✅ **IMPLEMENTED** (migration + code)
 
 #### `ondc_reference.order_mapping`
 
-- [ ] search_id - **NOT IMPLEMENTED** (no DB schema, only Redis)
-- [ ] quote_id - **NOT IMPLEMENTED** (no DB schema, only Redis)
-- [ ] order_id (ONDC) - **NOT IMPLEMENTED** (no DB schema, only Redis)
-- [ ] dispatch_order_id - **NOT IMPLEMENTED** (no DB schema, only Redis)
-- [ ] created_at - **NOT IMPLEMENTED** (no DB schema)
+- [x] search_id - ✅ **MIGRATION EXISTS** ⚠️ **CODE USES REDIS** (`order_record_repository.go` uses Redis keys)
+- [x] quote_id - ✅ **MIGRATION EXISTS** ⚠️ **CODE USES REDIS**
+- [x] order_id (ONDC) - ✅ **MIGRATION EXISTS** ⚠️ **CODE USES REDIS**
+- [x] dispatch_order_id - ✅ **MIGRATION EXISTS** ⚠️ **CODE USES REDIS**
+- [x] created_at - ✅ **MIGRATION EXISTS** ⚠️ **CODE USES REDIS**
+
+**Note:** Migration exists but code currently uses Redis (`order_record_repository.go`). DB table is ready for future migration.
 
 #### `client_registry.clients`
 
-- [ ] client_id - **NOT IMPLEMENTED** (no DB schema, only in-memory)
-- [ ] bap_id - **NOT IMPLEMENTED** (no DB schema)
-- [ ] bap_uri - **NOT IMPLEMENTED** (no DB schema)
-- [ ] status - **NOT IMPLEMENTED** (no DB schema)
-- [ ] api_key_hash - **NOT IMPLEMENTED** (no DB schema)
-- [ ] rate_limit - **NOT IMPLEMENTED** (no DB schema)
-- [ ] created_at - **NOT IMPLEMENTED** (no DB schema)
+- [x] client_id - ✅ **MIGRATION EXISTS** ⚠️ **CODE USES IN-MEMORY** (`client_registry.go` uses `InMemoryClientRegistry`)
+- [x] bap_id - ✅ **MIGRATION EXISTS** ⚠️ **CODE USES IN-MEMORY**
+- [x] bap_uri - ✅ **MIGRATION EXISTS** ⚠️ **CODE USES IN-MEMORY**
+- [x] status - ✅ **MIGRATION EXISTS** ⚠️ **CODE USES IN-MEMORY**
+- [x] api_key_hash - ✅ **MIGRATION EXISTS** ⚠️ **CODE USES IN-MEMORY**
+- [x] rate_limit - ✅ **MIGRATION EXISTS** ⚠️ **CODE USES IN-MEMORY**
+- [x] created_at - ✅ **MIGRATION EXISTS** ⚠️ **CODE USES IN-MEMORY**
+
+**Note:** Migration exists but code currently uses in-memory map (`InMemoryClientRegistry`). DB table is ready for future migration. TODO comment in code: "TODO: Replace with Redis-backed or DB-backed implementation for production"
 
 ---
 
@@ -169,8 +177,8 @@
 - [x] `/cancel` - ✅ **IMPLEMENTED** (cancel_handler.go, registered in main.go)
 - [x] `/update` - ✅ **IMPLEMENTED** (update_handler.go, registered in main.go)
 - [x] `/rto` - ✅ **IMPLEMENTED** (rto_handler.go, registered in main.go)
-- [ ] `/issue` - ❌ **NOT IMPLEMENTED** (no handler, not registered)
-- [ ] `/issue_status` - ❌ **NOT IMPLEMENTED** (no handler, not registered)
+- [x] `/issue` - ✅ **IMPLEMENTED** (issue_handler.go, registered in main.go)
+- [x] `/issue_status` - ✅ **IMPLEMENTED** (issue_status_handler.go, registered in main.go)
 
 ### Edge Rules
 
@@ -296,21 +304,21 @@
 
 ## 1️⃣3️⃣ AUDIT & OBSERVABILITY
 
-- [ ] Request stored - ❌ **NOT IMPLEMENTED** (no audit repository/service)
-- [ ] ACK stored - ❌ **NOT IMPLEMENTED** (no audit repository/service)
-- [ ] Callback stored - ❌ **NOT IMPLEMENTED** (no audit repository/service)
-- [ ] Retry attempts logged - ❌ **NOT IMPLEMENTED** (no callback_delivery_logs)
+- [x] Request stored - ✅ **IMPLEMENTED** (audit service integrated into all handlers)
+- [x] ACK stored - ✅ **IMPLEMENTED** (audit service logs ACK/NACK responses)
+- [x] Callback stored - ✅ **IMPLEMENTED** (audit service logs callback payloads)
+- [x] Retry attempts logged - ✅ **IMPLEMENTED** (callback_delivery_logs via audit service)
 - [x] trace_id everywhere - ✅ **IMPLEMENTED** (trace.go, all handlers)
-- [ ] 7-year retention (internal FR) - ❌ **NOT IMPLEMENTED** (no DB schema)
+- [ ] 7-year retention (internal FR) - ⚠️ **PARTIAL** (DB schema exists, retention policy needs configuration)
 
 ---
 
 ## 1️⃣4️⃣ IGM (Issue & Grievance)
 
-- [x] `/issue` - ✅ **IMPLEMENTED** (issue_handler.go, registered in main.go - TODO)
-- [ ] `/on_issue` - ⚠️ **PARTIAL** (callback handler in issue_handler.go, needs route registration)
-- [x] `/issue_status` - ✅ **IMPLEMENTED** (issue_status_handler.go, registered in main.go - TODO)
-- [ ] `/on_issue_status` - ⚠️ **PARTIAL** (callback handler in issue_status_handler.go, needs route registration)
+- [x] `/issue` - ✅ **IMPLEMENTED** (issue_handler.go, registered in main.go)
+- [x] `/on_issue` - ✅ **IMPLEMENTED** (HandleOnIssue in issue_handler.go, registered in main.go)
+- [x] `/issue_status` - ✅ **IMPLEMENTED** (issue_status_handler.go, registered in main.go)
+- [x] `/on_issue_status` - ✅ **IMPLEMENTED** (HandleOnIssueStatus in issue_status_handler.go, registered in main.go)
 - [x] Buyer → Seller → LSP cascading - ✅ **IMPLEMENTED** (issue handlers support cascading)
 - [ ] Zendesk sync - ❌ **SKIPPED** (per user request, no Zendesk service)
 - [x] Issue state tracking only - ✅ **IMPLEMENTED** (issue_repository.go)
@@ -324,7 +332,7 @@
 - [x] ❌ Blocking HTTP calls - ✅ **COMPLIANT** (all handlers async)
 - [x] ❌ Unsigned callbacks - ✅ **COMPLIANT** (callback_service.go uses signer)
 - [x] ❌ TTL-violating retries - ✅ **COMPLIANT** (config validation ensures TTL compliance)
-- [x] ❌ Missing audit logs - ⚠️ **VIOLATION** (no audit logging implemented)
+- [x] ❌ Missing audit logs - ✅ **COMPLIANT** (audit logging fully implemented and integrated)
 - [x] ❌ Order Service generating ONDC IDs - **NOT VERIFIED** (depends on Order Service)
 
 ---
@@ -369,10 +377,10 @@
 
 ### ⚠️ Partially Implemented
 
-- **Database Schema**: No Postgres-E migrations found (only Redis implementation)
-- **Audit Logging**: No audit repository/service implementation
-- **Callback Delivery Logging**: No callback_delivery_logs table
-- **Event Consumer Groups**: No initialization code for consumer groups
+- **Database Schema**: ✅ Migration files exist, need to run migrations
+- **Audit Logging**: ✅ Fully implemented and integrated into all handlers
+- **Callback Delivery Logging**: ✅ Fully implemented via audit service
+- **Event Consumer Groups**: ✅ Initialization code exists, needs wiring in main.go
 - **Caching**: No caching layer for status/track endpoints
 
 ### ❌ Not Implemented
@@ -380,8 +388,8 @@
 - **IGM (Issue & Grievance Management)**:
   - ✅ `/issue` endpoint - **IMPLEMENTED** (issue_handler.go)
   - ✅ `/issue_status` endpoint - **IMPLEMENTED** (issue_status_handler.go)
-  - ⚠️ `/on_issue` callback handler - **PARTIAL** (callback logic in handler, needs route registration)
-  - ⚠️ `/on_issue_status` callback handler - **PARTIAL** (callback logic in handler, needs route registration)
+  - ✅ `/on_issue` callback handler - **IMPLEMENTED** (HandleOnIssue in issue_handler.go, registered in main.go)
+  - ✅ `/on_issue_status` callback handler - **IMPLEMENTED** (HandleOnIssueStatus in issue_status_handler.go, registered in main.go)
   - ❌ Zendesk integration service - **SKIPPED** (per user request)
   - ✅ Issue repository - **IMPLEMENTED** (issue_repository.go)
   - ✅ GRO (Grievance Redressal Officer) service - **IMPLEMENTED** (gro_service.go)
@@ -408,10 +416,11 @@
    - ✅ Create `audit.request_response_logs` table
    - ✅ Create `audit.callback_delivery_logs` table
    - ✅ Implement audit repository/service
-   - ⚠️ Integrate into all handlers (optional enhancement)
+   - ✅ Integrate into all handlers (all 8 ONDC handlers)
 
 2. ✅ **Implement IGM Endpoints** (FR Section 9) - **COMPLETED** (Zendesk skipped)
    - ✅ Create `/issue` and `/issue_status` handlers
+   - ✅ Create `/on_issue` and `/on_issue_status` callback handlers
    - ❌ Create Zendesk integration service (SKIPPED per user request)
    - ✅ Create issue repository
    - ✅ Create GRO service
@@ -435,6 +444,12 @@
    - ✅ Add missing environment variables
    - ✅ Update config validation
 
+7. ✅ **Audit Integration** - **COMPLETED**
+   - ✅ Integrated audit logging into all 8 ONDC handlers
+   - ✅ Request/response logging with full payloads
+   - ✅ Callback delivery logging with retry attempts
+   - ✅ All handler tests updated with audit service mocks
+
 ### Low Priority (Nice to Have)
 
 7. **Caching Layer**
@@ -455,8 +470,8 @@
 - **Database Migrations**: ✅ Migration files created in `migrations/` directory
 - **IGM Directory**: ✅ IGM handlers and services implemented (`internal/handlers/igm/` and `internal/services/igm/`)
 - **Consumer Group Init**: ✅ Initialization code created - needs to be called in main.go on startup
-- **IGM Routes**: IGM handlers need to be registered in router (handlers are ready)
-- **Audit Integration**: Audit service ready - optional enhancement to integrate into handlers
+- **IGM Routes**: ✅ All IGM routes registered in router (`/issue`, `/issue_status`, `/on_issue`, `/on_issue_status`)
+- **Audit Integration**: ✅ Fully integrated into all 8 ONDC handlers with request/response and callback logging
 
 ---
 

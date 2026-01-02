@@ -29,8 +29,9 @@ func TestConfirmHandler_Success(t *testing.T) {
 	idempotencyService := new(mockIdempotencyService)
 	orderServiceClient := new(mockOrderServiceClient)
 	orderRecordService := new(mockOrderRecordService)
+	auditService := new(mockAuditService)
 
-	handler := NewConfirmHandler(eventPublisher, eventConsumer, callbackService, idempotencyService, orderServiceClient, orderRecordService, "test-bpp-id", "https://bpp.example.com", logger)
+	handler := NewConfirmHandler(eventPublisher, eventConsumer, callbackService, idempotencyService, orderServiceClient, orderRecordService, auditService, "test-bpp-id", "https://bpp.example.com", logger)
 
 	quoteID := uuid.New().String()
 	transactionID := uuid.New().String()
@@ -154,7 +155,8 @@ func TestConfirmHandler_InvalidQuoteID(t *testing.T) {
 	orderServiceClient := new(mockOrderServiceClient)
 	orderRecordService := new(mockOrderRecordService)
 
-	handler := NewConfirmHandler(eventPublisher, eventConsumer, callbackService, idempotencyService, orderServiceClient, orderRecordService, "test-bpp-id", "https://bpp.example.com", logger)
+	auditService := new(mockAuditService)
+	handler := NewConfirmHandler(eventPublisher, eventConsumer, callbackService, idempotencyService, orderServiceClient, orderRecordService, auditService, "test-bpp-id", "https://bpp.example.com", logger)
 
 	transactionID := uuid.New().String()
 	messageID := uuid.New().String()
@@ -208,7 +210,8 @@ func TestConfirmHandler_OrderConfirmFailed(t *testing.T) {
 	orderServiceClient := new(mockOrderServiceClient)
 	orderRecordService := new(mockOrderRecordService)
 
-	handler := NewConfirmHandler(eventPublisher, eventConsumer, callbackService, idempotencyService, orderServiceClient, orderRecordService, "test-bpp-id", "https://bpp.example.com", logger)
+	auditService := new(mockAuditService)
+	handler := NewConfirmHandler(eventPublisher, eventConsumer, callbackService, idempotencyService, orderServiceClient, orderRecordService, auditService, "test-bpp-id", "https://bpp.example.com", logger)
 
 	quoteID := uuid.New().String()
 	transactionID := uuid.New().String()

@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"uois-gateway/internal/models"
+	"uois-gateway/internal/services/audit"
 	"uois-gateway/pkg/errors"
 
 	"github.com/gin-gonic/gin"
@@ -65,6 +66,20 @@ func (m *mockIdempotencyService) StoreIdempotency(ctx context.Context, key strin
 	return args.Error(0)
 }
 
+type mockAuditService struct {
+	mock.Mock
+}
+
+func (m *mockAuditService) LogRequestResponse(ctx context.Context, req *audit.RequestResponseLogParams) error {
+	args := m.Called(ctx, req)
+	return args.Error(0)
+}
+
+func (m *mockAuditService) LogCallbackDelivery(ctx context.Context, req *audit.CallbackDeliveryLogParams) error {
+	args := m.Called(ctx, req)
+	return args.Error(0)
+}
+
 func TestSearchHandler_Success(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	logger := zap.NewNop()
@@ -75,7 +90,8 @@ func TestSearchHandler_Success(t *testing.T) {
 	idempotencyService := new(mockIdempotencyService)
 
 	orderRecordService := new(mockOrderRecordService)
-	handler := NewSearchHandler(eventPublisher, eventConsumer, callbackService, idempotencyService, orderRecordService, "P1", "bpp.example.com", "https://bpp.example.com", "Test BPP", "https://bpp.example.com/terms", logger)
+	auditService := new(mockAuditService)
+	handler := NewSearchHandler(eventPublisher, eventConsumer, callbackService, idempotencyService, orderRecordService, auditService, "P1", "bpp.example.com", "https://bpp.example.com", "Test BPP", "https://bpp.example.com/terms", logger)
 
 	transactionID := uuid.New().String()
 	messageID := uuid.New().String()
@@ -182,7 +198,8 @@ func TestSearchHandler_InvalidRequest(t *testing.T) {
 	idempotencyService := new(mockIdempotencyService)
 
 	orderRecordService := new(mockOrderRecordService)
-	handler := NewSearchHandler(eventPublisher, eventConsumer, callbackService, idempotencyService, orderRecordService, "P1", "bpp.example.com", "https://bpp.example.com", "Test BPP", "https://bpp.example.com/terms", logger)
+	auditService := new(mockAuditService)
+	handler := NewSearchHandler(eventPublisher, eventConsumer, callbackService, idempotencyService, orderRecordService, auditService, "P1", "bpp.example.com", "https://bpp.example.com", "Test BPP", "https://bpp.example.com/terms", logger)
 
 	// Create invalid request (missing context)
 	requestBody := map[string]interface{}{
@@ -220,7 +237,8 @@ func TestSearchHandler_EventPublishFailure(t *testing.T) {
 	idempotencyService := new(mockIdempotencyService)
 
 	orderRecordService := new(mockOrderRecordService)
-	handler := NewSearchHandler(eventPublisher, eventConsumer, callbackService, idempotencyService, orderRecordService, "P1", "bpp.example.com", "https://bpp.example.com", "Test BPP", "https://bpp.example.com/terms", logger)
+	auditService := new(mockAuditService)
+	handler := NewSearchHandler(eventPublisher, eventConsumer, callbackService, idempotencyService, orderRecordService, auditService, "P1", "bpp.example.com", "https://bpp.example.com", "Test BPP", "https://bpp.example.com/terms", logger)
 
 	transactionID := uuid.New().String()
 	messageID := uuid.New().String()
@@ -291,7 +309,8 @@ func TestSearchHandler_CallbackContextRegeneration(t *testing.T) {
 	idempotencyService := new(mockIdempotencyService)
 
 	orderRecordService := new(mockOrderRecordService)
-	handler := NewSearchHandler(eventPublisher, eventConsumer, callbackService, idempotencyService, orderRecordService, "P1", "bpp.example.com", "https://bpp.example.com", "Test BPP", "https://bpp.example.com/terms", logger)
+	auditService := new(mockAuditService)
+	handler := NewSearchHandler(eventPublisher, eventConsumer, callbackService, idempotencyService, orderRecordService, auditService, "P1", "bpp.example.com", "https://bpp.example.com", "Test BPP", "https://bpp.example.com/terms", logger)
 
 	transactionID := uuid.New().String()
 	originalMessageID := uuid.New().String()
@@ -406,7 +425,8 @@ func TestSearchHandler_TTLParsing(t *testing.T) {
 	logger := zap.NewNop()
 
 	orderRecordService := new(mockOrderRecordService)
-	handler := NewSearchHandler(nil, nil, nil, nil, orderRecordService, "P1", "bpp.example.com", "https://bpp.example.com", "Test BPP", "https://bpp.example.com/terms", logger)
+	auditService := new(mockAuditService)
+	handler := NewSearchHandler(nil, nil, nil, nil, orderRecordService, auditService, "P1", "bpp.example.com", "https://bpp.example.com", "Test BPP", "https://bpp.example.com/terms", logger)
 
 	tests := []struct {
 		name        string
@@ -448,7 +468,8 @@ func TestSearchHandler_StoreOrderRecordFailure(t *testing.T) {
 	idempotencyService := new(mockIdempotencyService)
 	orderRecordService := new(mockOrderRecordService)
 
-	handler := NewSearchHandler(eventPublisher, eventConsumer, callbackService, idempotencyService, orderRecordService, "P1", "bpp.example.com", "https://bpp.example.com", "Test BPP", "https://bpp.example.com/terms", logger)
+	auditService := new(mockAuditService)
+	handler := NewSearchHandler(eventPublisher, eventConsumer, callbackService, idempotencyService, orderRecordService, auditService, "P1", "bpp.example.com", "https://bpp.example.com", "Test BPP", "https://bpp.example.com/terms", logger)
 
 	transactionID := uuid.New().String()
 	messageID := uuid.New().String()
@@ -521,7 +542,8 @@ func TestSearchHandler_InvalidTTL(t *testing.T) {
 	idempotencyService := new(mockIdempotencyService)
 	orderRecordService := new(mockOrderRecordService)
 
-	handler := NewSearchHandler(eventPublisher, eventConsumer, callbackService, idempotencyService, orderRecordService, "P1", "bpp.example.com", "https://bpp.example.com", "Test BPP", "https://bpp.example.com/terms", logger)
+	auditService := new(mockAuditService)
+	handler := NewSearchHandler(eventPublisher, eventConsumer, callbackService, idempotencyService, orderRecordService, auditService, "P1", "bpp.example.com", "https://bpp.example.com", "Test BPP", "https://bpp.example.com/terms", logger)
 
 	transactionID := uuid.New().String()
 	messageID := uuid.New().String()
@@ -595,7 +617,8 @@ func TestSearchHandler_EmptyTTL(t *testing.T) {
 	idempotencyService := new(mockIdempotencyService)
 	orderRecordService := new(mockOrderRecordService)
 
-	handler := NewSearchHandler(eventPublisher, eventConsumer, callbackService, idempotencyService, orderRecordService, "P1", "bpp.example.com", "https://bpp.example.com", "Test BPP", "https://bpp.example.com/terms", logger)
+	auditService := new(mockAuditService)
+	handler := NewSearchHandler(eventPublisher, eventConsumer, callbackService, idempotencyService, orderRecordService, auditService, "P1", "bpp.example.com", "https://bpp.example.com", "Test BPP", "https://bpp.example.com/terms", logger)
 
 	transactionID := uuid.New().String()
 	messageID := uuid.New().String()

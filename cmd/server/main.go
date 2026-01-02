@@ -19,6 +19,7 @@ import (
 	"uois-gateway/internal/handlers/ondc"
 	"uois-gateway/internal/middleware"
 	auditRepo "uois-gateway/internal/repository/audit"
+	clientRegistryRepo "uois-gateway/internal/repository/client_registry"
 	"uois-gateway/internal/repository/issue"
 	"uois-gateway/internal/repository/order_record"
 	auditService "uois-gateway/internal/services/audit"
@@ -74,9 +75,11 @@ func main() {
 	orderRecordRepo := order_record.NewRepository(redisClient.GetClient(), *cfg, logger)
 	issueRepo := issue.NewRepository(redisClient.GetClient(), *cfg, logger)
 	auditRepoInstance := auditRepo.NewRepository(db, *cfg, logger)
+	clientRegistryRepoInstance := clientRegistryRepo.NewRepository(db, *cfg, logger)
 
 	// Initialize services
-	clientRegistry := client.NewInMemoryClientRegistry(logger)
+	// Use DB-backed client registry with Redis caching (replaces in-memory implementation)
+	clientRegistry := client.NewDBClientRegistry(clientRegistryRepoInstance, redisClient.GetClient(), *cfg, logger)
 	clientAuthService := auth.NewClientAuthService(clientRegistry, logger)
 	rateLimitService := auth.NewRateLimitService(redisClient, cfg.RateLimit, logger)
 
@@ -102,7 +105,7 @@ func main() {
 
 	eventConsumer := event.NewConsumer(streamConsumerAdapter, cfg.Streams, logger)
 	groService := igmService.NewGROService(logger)
-	_ = auditService.NewService(auditRepoInstance, logger) // Audit service ready for future integration
+	auditServiceInstance := auditService.NewService(auditRepoInstance, logger)
 
 	// Initialize consumer groups
 	initCtx, initCancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -119,6 +122,7 @@ func main() {
 		orderRecordServiceInterface ondc.OrderRecordService     = orderRecordRepo
 		eventPublisherInterface     ondc.EventPublisher         = eventPublisher
 		eventConsumerInterface      ondc.EventConsumer          = eventConsumer
+		auditServiceInterface       ondc.AuditService           = auditServiceInstance
 		clientAuthServiceInterface  middleware.AuthService      = clientAuthService
 		rateLimitServiceInterface   middleware.RateLimitService = rateLimitService
 	)
@@ -130,6 +134,7 @@ func main() {
 		callbackServiceInterface,
 		idempotencyServiceInterface,
 		orderRecordServiceInterface,
+		auditServiceInterface,
 		cfg.ONDC.ProviderID,
 		cfg.ONDC.BPPID,
 		cfg.ONDC.BPPURI,
@@ -145,6 +150,7 @@ func main() {
 		idempotencyServiceInterface,
 		orderServiceClientInterface,
 		orderRecordServiceInterface,
+		auditServiceInterface,
 		cfg.ONDC.ProviderID,
 		cfg.ONDC.BPPID,
 		cfg.ONDC.BPPURI,
@@ -158,6 +164,7 @@ func main() {
 		idempotencyServiceInterface,
 		orderServiceClientInterface,
 		orderRecordServiceInterface,
+		auditServiceInterface,
 		cfg.ONDC.BPPID,
 		cfg.ONDC.BPPURI,
 		logger,
@@ -168,6 +175,7 @@ func main() {
 		idempotencyServiceInterface,
 		orderServiceClientInterface,
 		orderRecordServiceInterface,
+		auditServiceInterface,
 		cfg.ONDC.BPPID,
 		cfg.ONDC.BPPURI,
 		logger,
@@ -178,6 +186,7 @@ func main() {
 		idempotencyServiceInterface,
 		orderServiceClientInterface,
 		orderRecordServiceInterface,
+		auditServiceInterface,
 		cfg.ONDC.BPPID,
 		cfg.ONDC.BPPURI,
 		logger,
@@ -188,6 +197,7 @@ func main() {
 		idempotencyServiceInterface,
 		orderServiceClientInterface,
 		orderRecordServiceInterface,
+		auditServiceInterface,
 		cfg.ONDC.BPPID,
 		cfg.ONDC.BPPURI,
 		logger,
@@ -198,6 +208,7 @@ func main() {
 		idempotencyServiceInterface,
 		orderServiceClientInterface,
 		orderRecordServiceInterface,
+		auditServiceInterface,
 		cfg.ONDC.BPPID,
 		cfg.ONDC.BPPURI,
 		logger,
@@ -208,6 +219,7 @@ func main() {
 		idempotencyServiceInterface,
 		orderServiceClientInterface,
 		orderRecordServiceInterface,
+		auditServiceInterface,
 		cfg.ONDC.BPPID,
 		cfg.ONDC.BPPURI,
 		logger,
@@ -369,6 +381,8 @@ func setupRouter(
 	// Register IGM endpoints
 	ondcGroup.POST("/issue", issueHandler.HandleIssue)
 	ondcGroup.POST("/issue_status", issueStatusHandler.HandleIssueStatus)
+	ondcGroup.POST("/on_issue", issueHandler.HandleOnIssue)
+	ondcGroup.POST("/on_issue_status", issueStatusHandler.HandleOnIssueStatus)
 
 	return router
 }

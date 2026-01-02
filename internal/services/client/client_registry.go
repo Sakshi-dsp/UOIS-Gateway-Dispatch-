@@ -16,7 +16,7 @@ type ClientRegistry interface {
 }
 
 // InMemoryClientRegistry is a simple in-memory implementation for development/testing
-// TODO: Replace with Redis-backed or DB-backed implementation for production
+// NOTE: Production should use DBClientRegistry (DB-backed with Redis caching)
 // Thread-safe implementation using RWMutex for concurrent access
 type InMemoryClientRegistry struct {
 	mu      sync.RWMutex // Protects clients map from concurrent access
