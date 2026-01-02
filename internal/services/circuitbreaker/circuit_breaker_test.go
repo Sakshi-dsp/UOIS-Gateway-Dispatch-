@@ -58,7 +58,7 @@ func TestCircuitBreaker_OpenAfterThreshold(t *testing.T) {
 func TestCircuitBreaker_HalfOpenAfterTimeout(t *testing.T) {
 	config := Config{
 		FailureThreshold:    2,
-		SuccessThreshold:    1,
+		SuccessThreshold:    2,
 		Timeout:             50 * time.Millisecond,
 		MaxRequestsHalfOpen: 2,
 	}
@@ -75,12 +75,14 @@ func TestCircuitBreaker_HalfOpenAfterTimeout(t *testing.T) {
 	// Wait for timeout
 	time.Sleep(100 * time.Millisecond)
 
-	// Should transition to half-open
+	// Should transition to half-open after first successful call
 	err := cb.Execute(context.Background(), func() error {
 		return nil
 	})
 	assert.NoError(t, err)
+	// After one success with SuccessThreshold=2, should still be half-open
 	assert.Equal(t, StateHalfOpen, cb.GetState())
+	assert.Equal(t, 0, cb.GetFailureCount())
 }
 
 func TestCircuitBreaker_CloseAfterSuccess(t *testing.T) {
@@ -149,7 +151,7 @@ func TestCircuitBreaker_Reset(t *testing.T) {
 func TestCircuitBreaker_MaxRequestsHalfOpen(t *testing.T) {
 	config := Config{
 		FailureThreshold:    2,
-		SuccessThreshold:    1,
+		SuccessThreshold:    3,
 		Timeout:             50 * time.Millisecond,
 		MaxRequestsHalfOpen: 2,
 	}
@@ -177,6 +179,8 @@ func TestCircuitBreaker_MaxRequestsHalfOpen(t *testing.T) {
 		return nil
 	})
 	assert.NoError(t, err)
+	// State should still be half-open (SuccessThreshold=3, only 2 successes so far)
+	assert.Equal(t, StateHalfOpen, cb.GetState())
 
 	// Third request should fail (max requests exceeded)
 	err = cb.Execute(context.Background(), func() error {

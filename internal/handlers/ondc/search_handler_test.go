@@ -148,6 +148,9 @@ func TestSearchHandler_Success(t *testing.T) {
 	// Mock successful order record storage
 	orderRecordService.On("StoreOrderRecord", mock.Anything, mock.AnythingOfType("*ondc.OrderRecord")).Return(nil)
 
+	auditService.On("LogRequestResponse", mock.Anything, mock.Anything).Return(nil)
+	auditService.On("LogCallbackDelivery", mock.Anything, mock.Anything).Return(nil).Maybe()
+
 	// Create request
 	requestBody := map[string]interface{}{
 		"context": map[string]interface{}{
@@ -220,6 +223,8 @@ func TestSearchHandler_InvalidRequest(t *testing.T) {
 	auditService := new(mockAuditService)
 	handler := NewSearchHandler(eventPublisher, eventConsumer, callbackService, idempotencyService, orderRecordService, auditService, "P1", "bpp.example.com", "https://bpp.example.com", "Test BPP", "https://bpp.example.com/terms", logger)
 
+	auditService.On("LogRequestResponse", mock.Anything, mock.Anything).Return(nil)
+
 	// Create invalid request (missing context)
 	requestBody := map[string]interface{}{
 		"message": map[string]interface{}{},
@@ -267,6 +272,8 @@ func TestSearchHandler_EventPublishFailure(t *testing.T) {
 
 	// Mock successful order record storage
 	orderRecordService.On("StoreOrderRecord", mock.Anything, mock.AnythingOfType("*ondc.OrderRecord")).Return(nil)
+
+	auditService.On("LogRequestResponse", mock.Anything, mock.Anything).Return(nil)
 
 	// Mock event publishing failure
 	eventPublisher.On("PublishEvent", mock.Anything, "stream.location.search", mock.AnythingOfType("*models.SearchRequestedEvent")).Return(errors.NewDomainError(65020, "internal error", "failed to publish event"))
@@ -358,6 +365,9 @@ func TestSearchHandler_CallbackContextRegeneration(t *testing.T) {
 
 	// Mock successful order record storage
 	orderRecordService.On("StoreOrderRecord", mock.Anything, mock.AnythingOfType("*ondc.OrderRecord")).Return(nil)
+
+	auditService.On("LogRequestResponse", mock.Anything, mock.Anything).Return(nil)
+	auditService.On("LogCallbackDelivery", mock.Anything, mock.Anything).Return(nil).Maybe()
 
 	// Capture callback payload to verify context regeneration
 	var capturedCallbackPayload models.ONDCResponse
@@ -499,6 +509,8 @@ func TestSearchHandler_StoreOrderRecordFailure(t *testing.T) {
 	// Mock order record storage failure
 	orderRecordService.On("StoreOrderRecord", mock.Anything, mock.AnythingOfType("*ondc.OrderRecord")).Return(errors.NewDomainError(65020, "internal error", "storage failure"))
 
+	auditService.On("LogRequestResponse", mock.Anything, mock.Anything).Return(nil)
+
 	// Create request
 	requestBody := map[string]interface{}{
 		"context": map[string]interface{}{
@@ -566,6 +578,9 @@ func TestSearchHandler_InvalidTTL(t *testing.T) {
 
 	transactionID := uuid.New().String()
 	messageID := uuid.New().String()
+
+	// Mock audit service for error response logging
+	auditService.On("LogRequestResponse", mock.Anything, mock.Anything).Return(nil)
 
 	// Mock idempotency check (no existing request)
 	idempotencyService.On("CheckIdempotency", mock.Anything, mock.AnythingOfType("string")).Return(nil, false, nil)
@@ -653,6 +668,9 @@ func TestSearchHandler_EmptyTTL(t *testing.T) {
 
 	// Mock idempotency storage (handler stores idempotency before callback, even if callback fails)
 	idempotencyService.On("StoreIdempotency", mock.Anything, mock.AnythingOfType("string"), mock.Anything, mock.AnythingOfType("time.Duration")).Return(nil).Maybe()
+
+	// Mock audit service (optional, handler logs request/response)
+	auditService.On("LogRequestResponse", mock.Anything, mock.Anything).Return(nil).Maybe()
 
 	// Create request with empty TTL
 	requestBody := map[string]interface{}{

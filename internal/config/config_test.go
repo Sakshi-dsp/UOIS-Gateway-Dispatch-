@@ -22,6 +22,11 @@ func TestLoadConfig_Success(t *testing.T) {
 	os.Setenv("ADMIN_SERVICE_GRPC_PORT", "50052")
 	os.Setenv("ONDC_PRIVATE_KEY_PATH", "/test/private.pem")
 	os.Setenv("ONDC_PUBLIC_KEY_PATH", "/test/public.pem")
+	os.Setenv("ONDC_SUBSCRIBER_ID", "test-subscriber")
+	os.Setenv("ONDC_UK_ID", "test-uk")
+	os.Setenv("ONDC_PROVIDER_ID", "test-provider")
+	os.Setenv("ONDC_BPP_ID", "test-bpp")
+	os.Setenv("ONDC_BPP_URI", "https://bpp.example.com")
 	defer func() {
 		os.Unsetenv("POSTGRES_E_HOST")
 		os.Unsetenv("POSTGRES_E_PORT")
@@ -35,6 +40,11 @@ func TestLoadConfig_Success(t *testing.T) {
 		os.Unsetenv("ADMIN_SERVICE_GRPC_PORT")
 		os.Unsetenv("ONDC_PRIVATE_KEY_PATH")
 		os.Unsetenv("ONDC_PUBLIC_KEY_PATH")
+		os.Unsetenv("ONDC_SUBSCRIBER_ID")
+		os.Unsetenv("ONDC_UK_ID")
+		os.Unsetenv("ONDC_PROVIDER_ID")
+		os.Unsetenv("ONDC_BPP_ID")
+		os.Unsetenv("ONDC_BPP_URI")
 	}()
 
 	cfg, err := LoadConfig()
@@ -58,6 +68,11 @@ func TestLoadConfig_MissingPostgresHost(t *testing.T) {
 	os.Setenv("ADMIN_SERVICE_GRPC_PORT", "50052")
 	os.Setenv("ONDC_PRIVATE_KEY_PATH", "/test/private.pem")
 	os.Setenv("ONDC_PUBLIC_KEY_PATH", "/test/public.pem")
+	os.Setenv("ONDC_SUBSCRIBER_ID", "test-subscriber")
+	os.Setenv("ONDC_UK_ID", "test-uk")
+	os.Setenv("ONDC_PROVIDER_ID", "test-provider")
+	os.Setenv("ONDC_BPP_ID", "test-bpp")
+	os.Setenv("ONDC_BPP_URI", "https://bpp.example.com")
 	defer func() {
 		os.Unsetenv("POSTGRES_E_HOST")
 		os.Unsetenv("POSTGRES_E_PORT")
@@ -71,6 +86,11 @@ func TestLoadConfig_MissingPostgresHost(t *testing.T) {
 		os.Unsetenv("ADMIN_SERVICE_GRPC_PORT")
 		os.Unsetenv("ONDC_PRIVATE_KEY_PATH")
 		os.Unsetenv("ONDC_PUBLIC_KEY_PATH")
+		os.Unsetenv("ONDC_SUBSCRIBER_ID")
+		os.Unsetenv("ONDC_UK_ID")
+		os.Unsetenv("ONDC_PROVIDER_ID")
+		os.Unsetenv("ONDC_BPP_ID")
+		os.Unsetenv("ONDC_BPP_URI")
 	}()
 
 	cfg, err := LoadConfig()
@@ -93,6 +113,11 @@ func TestLoadConfig_MissingRedisHost(t *testing.T) {
 	os.Setenv("ADMIN_SERVICE_GRPC_PORT", "50052")
 	os.Setenv("ONDC_PRIVATE_KEY_PATH", "/test/private.pem")
 	os.Setenv("ONDC_PUBLIC_KEY_PATH", "/test/public.pem")
+	os.Setenv("ONDC_SUBSCRIBER_ID", "test-subscriber")
+	os.Setenv("ONDC_UK_ID", "test-uk")
+	os.Setenv("ONDC_PROVIDER_ID", "test-provider")
+	os.Setenv("ONDC_BPP_ID", "test-bpp")
+	os.Setenv("ONDC_BPP_URI", "https://bpp.example.com")
 	defer func() {
 		os.Unsetenv("POSTGRES_E_HOST")
 		os.Unsetenv("POSTGRES_E_PORT")
@@ -106,6 +131,11 @@ func TestLoadConfig_MissingRedisHost(t *testing.T) {
 		os.Unsetenv("ADMIN_SERVICE_GRPC_PORT")
 		os.Unsetenv("ONDC_PRIVATE_KEY_PATH")
 		os.Unsetenv("ONDC_PUBLIC_KEY_PATH")
+		os.Unsetenv("ONDC_SUBSCRIBER_ID")
+		os.Unsetenv("ONDC_UK_ID")
+		os.Unsetenv("ONDC_PROVIDER_ID")
+		os.Unsetenv("ONDC_BPP_ID")
+		os.Unsetenv("ONDC_BPP_URI")
 	}()
 
 	cfg, err := LoadConfig()
@@ -446,6 +476,11 @@ func TestValidate_Success(t *testing.T) {
 		ONDC: ONDCConfig{
 			PrivateKeyPath: "/test/private.pem",
 			PublicKeyPath:  "/test/public.pem",
+			SubscriberID:   "test-subscriber",
+			UkID:           "test-uk",
+			ProviderID:     "test-provider",
+			BPPID:          "test-bpp",
+			BPPURI:         "https://bpp.example.com",
 		},
 		TTL: TTLConfig{
 			ONDCRequestTTL: 30,
@@ -491,6 +526,11 @@ func TestValidate_RetryBackoffExceedsTTL(t *testing.T) {
 		ONDC: ONDCConfig{
 			PrivateKeyPath: "/test/private.pem",
 			PublicKeyPath:  "/test/public.pem",
+			SubscriberID:   "test-subscriber",
+			UkID:           "test-uk",
+			ProviderID:     "test-provider",
+			BPPID:          "test-bpp",
+			BPPURI:         "https://bpp.example.com",
 		},
 		TTL: TTLConfig{
 			ONDCRequestTTL: 30,
@@ -535,6 +575,11 @@ func TestValidate_CallbackConfig_InvalidTimeout(t *testing.T) {
 		ONDC: ONDCConfig{
 			PrivateKeyPath: "/test/private.pem",
 			PublicKeyPath:  "/test/public.pem",
+			SubscriberID:   "test-subscriber",
+			UkID:           "test-uk",
+			ProviderID:     "test-provider",
+			BPPID:          "test-bpp",
+			BPPURI:         "https://bpp.example.com",
 		},
 		TTL: TTLConfig{
 			ONDCRequestTTL: 30,
@@ -579,6 +624,11 @@ func TestValidate_CallbackConfig_DLQEnabledWithoutStream(t *testing.T) {
 		ONDC: ONDCConfig{
 			PrivateKeyPath: "/test/private.pem",
 			PublicKeyPath:  "/test/public.pem",
+			SubscriberID:   "test-subscriber",
+			UkID:           "test-uk",
+			ProviderID:     "test-provider",
+			BPPID:          "test-bpp",
+			BPPURI:         "https://bpp.example.com",
 		},
 		TTL: TTLConfig{
 			ONDCRequestTTL: 30,
@@ -625,6 +675,11 @@ func TestValidate_RateLimit_InvalidWhenEnabled(t *testing.T) {
 		ONDC: ONDCConfig{
 			PrivateKeyPath: "/test/private.pem",
 			PublicKeyPath:  "/test/public.pem",
+			SubscriberID:   "test-subscriber",
+			UkID:           "test-uk",
+			ProviderID:     "test-provider",
+			BPPID:          "test-bpp",
+			BPPURI:         "https://bpp.example.com",
 		},
 		TTL: TTLConfig{
 			ONDCRequestTTL: 30,
@@ -676,6 +731,11 @@ func TestValidate_Zendesk_PartialConfig(t *testing.T) {
 		ONDC: ONDCConfig{
 			PrivateKeyPath: "/test/private.pem",
 			PublicKeyPath:  "/test/public.pem",
+			SubscriberID:   "test-subscriber",
+			UkID:           "test-uk",
+			ProviderID:     "test-provider",
+			BPPID:          "test-bpp",
+			BPPURI:         "https://bpp.example.com",
 		},
 		TTL: TTLConfig{
 			ONDCRequestTTL: 30,
@@ -726,6 +786,11 @@ func TestValidate_Zendesk_MissingWebhookSecret(t *testing.T) {
 		ONDC: ONDCConfig{
 			PrivateKeyPath: "/test/private.pem",
 			PublicKeyPath:  "/test/public.pem",
+			SubscriberID:   "test-subscriber",
+			UkID:           "test-uk",
+			ProviderID:     "test-provider",
+			BPPID:          "test-bpp",
+			BPPURI:         "https://bpp.example.com",
 		},
 		TTL: TTLConfig{
 			ONDCRequestTTL: 30,

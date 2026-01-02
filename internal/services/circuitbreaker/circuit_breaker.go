@@ -106,13 +106,18 @@ func (cb *CircuitBreaker) beforeCall() error {
 		if time.Since(cb.lastFailure) >= cb.config.Timeout {
 			cb.state = StateHalfOpen
 			cb.halfOpenCount = 0
-			return nil
+			// Fall through to half-open logic to increment count
+		} else {
+			return ErrCircuitBreakerOpen
 		}
-		return ErrCircuitBreakerOpen
+		fallthrough
 	case StateHalfOpen:
+		// Check if we've reached the max requests limit
+		// We check >= because if count equals max, we've already used all allowed requests
 		if cb.halfOpenCount >= cb.config.MaxRequestsHalfOpen {
 			return ErrCircuitBreakerHalfOpen
 		}
+		// Increment count before allowing the request
 		cb.halfOpenCount++
 		return nil
 	default:

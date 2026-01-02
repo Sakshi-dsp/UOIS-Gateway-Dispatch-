@@ -82,6 +82,9 @@ func TestConfirmHandler_Success(t *testing.T) {
 			record.ClientID == "test-client"
 	})).Return(nil)
 
+	auditService.On("LogRequestResponse", mock.Anything, mock.Anything).Return(nil).Maybe()
+	auditService.On("LogCallbackDelivery", mock.Anything, mock.Anything).Return(nil).Maybe()
+
 	// Mock successful callback
 	callbackService.On("SendCallback", mock.Anything, mock.MatchedBy(func(url string) bool {
 		return strings.HasSuffix(url, "/on_confirm")
@@ -162,6 +165,7 @@ func TestConfirmHandler_InvalidQuoteID(t *testing.T) {
 	messageID := uuid.New().String()
 
 	idempotencyService.On("CheckIdempotency", mock.Anything, mock.AnythingOfType("string")).Return(nil, false, nil)
+	auditService.On("LogRequestResponse", mock.Anything, mock.Anything).Return(nil)
 
 	// Note: ValidateQuoteIDTTL should not be called when quote_id is missing
 	// The handler should return error during extraction
@@ -252,6 +256,9 @@ func TestConfirmHandler_OrderConfirmFailed(t *testing.T) {
 	callbackService.On("SendCallback", mock.Anything, mock.MatchedBy(func(url string) bool {
 		return strings.HasSuffix(url, "/on_confirm")
 	}), mock.Anything).Return(nil).Maybe()
+
+	auditService.On("LogRequestResponse", mock.Anything, mock.Anything).Return(nil)
+	auditService.On("LogCallbackDelivery", mock.Anything, mock.Anything).Return(nil).Maybe()
 
 	requestBody := map[string]interface{}{
 		"context": map[string]interface{}{

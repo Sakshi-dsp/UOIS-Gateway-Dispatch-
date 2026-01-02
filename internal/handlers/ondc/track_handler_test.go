@@ -38,6 +38,9 @@ func TestTrackHandler_Success(t *testing.T) {
 	idempotencyService.On("CheckIdempotency", mock.Anything, mock.AnythingOfType("string")).Return(nil, false, nil)
 	idempotencyService.On("StoreIdempotency", mock.Anything, mock.AnythingOfType("string"), mock.Anything, mock.AnythingOfType("time.Duration")).Return(nil)
 
+	// Mock audit service (optional, handler logs request/response)
+	auditService.On("LogRequestResponse", mock.Anything, mock.Anything).Return(nil).Maybe()
+
 	// Mock cache miss
 	cacheService.On("Get", mock.Anything, mock.AnythingOfType("string"), mock.Anything).Return(false, nil)
 	cacheService.On("Set", mock.Anything, mock.AnythingOfType("string"), mock.Anything).Return(nil).Maybe()

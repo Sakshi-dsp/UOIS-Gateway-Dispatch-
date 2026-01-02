@@ -61,18 +61,20 @@ func TestIssueStatusHandler_HandleIssueStatus_Success(t *testing.T) {
 	mockGRO.On("GetGRODetails", mock.Anything, models.IssueTypeIssue).Return(&models.GRO{Level: "L1"}, nil)
 	mockCallback.On("SendCallback", mock.Anything, mock.Anything, mock.Anything).Return(nil)
 
+	bodyBytes, _ := json.Marshal(reqBody)
 	w := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(w)
-	c.Request = httptest.NewRequest("POST", "/issue_status", nil)
-	c.Set("client", &models.Client{ID: "client-1"})
-
+	c.Request = httptest.NewRequest("POST", "/issue_status", bytes.NewReader(bodyBytes))
 	c.Request.Header.Set("Content-Type", "application/json")
-	bodyBytes, _ := json.Marshal(reqBody)
-	c.Request.Body = http.MaxBytesReader(w, httptest.NewRequest("POST", "/issue_status", bytes.NewReader(bodyBytes)).Body, 1048576)
+	c.Set("client", &models.Client{ID: "client-1"})
 
 	handler.HandleIssueStatus(c)
 
 	assert.Equal(t, http.StatusOK, w.Code)
+
+	// Wait for goroutine callback to complete
+	time.Sleep(100 * time.Millisecond)
+
 	mockRepo.AssertExpectations(t)
 	mockCallback.AssertExpectations(t)
 	mockIdempotency.AssertExpectations(t)

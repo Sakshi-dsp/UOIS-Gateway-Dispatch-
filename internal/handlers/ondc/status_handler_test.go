@@ -41,6 +41,10 @@ func TestStatusHandler_Success(t *testing.T) {
 	idempotencyService.On("CheckIdempotency", mock.Anything, mock.AnythingOfType("string")).Return(nil, false, nil)
 	idempotencyService.On("StoreIdempotency", mock.Anything, mock.AnythingOfType("string"), mock.Anything, mock.AnythingOfType("time.Duration")).Return(nil)
 
+	// Mock audit service (optional, handler logs request/response and callbacks)
+	auditService.On("LogRequestResponse", mock.Anything, mock.Anything).Return(nil).Maybe()
+	auditService.On("LogCallbackDelivery", mock.Anything, mock.Anything).Return(nil).Maybe()
+
 	// Mock cache miss
 	cacheService.On("Get", mock.Anything, mock.AnythingOfType("string"), mock.Anything).Return(false, nil)
 	cacheService.On("Set", mock.Anything, mock.AnythingOfType("string"), mock.Anything).Return(nil).Maybe()
@@ -134,6 +138,9 @@ func TestStatusHandler_OrderNotFound(t *testing.T) {
 	messageID := uuid.New().String()
 
 	idempotencyService.On("CheckIdempotency", mock.Anything, mock.AnythingOfType("string")).Return(nil, false, nil)
+
+	// Mock audit service (optional, handler logs request/response)
+	auditService.On("LogRequestResponse", mock.Anything, mock.Anything).Return(nil).Maybe()
 
 	// Mock order record lookup failure
 	orderRecordService.On("GetOrderRecordByOrderID", mock.Anything, "test-client", clientOrderID).Return(nil, errors.NewDomainError(65006, "order not found", "order_id not found"))

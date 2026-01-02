@@ -38,6 +38,10 @@ func TestUpdateHandler_Success(t *testing.T) {
 	idempotencyService.On("CheckIdempotency", mock.Anything, mock.AnythingOfType("string")).Return(nil, false, nil)
 	idempotencyService.On("StoreIdempotency", mock.Anything, mock.AnythingOfType("string"), mock.Anything, mock.AnythingOfType("time.Duration")).Return(nil)
 
+	// Mock audit service (optional, handler logs request/response and callbacks)
+	auditService.On("LogRequestResponse", mock.Anything, mock.Anything).Return(nil).Maybe()
+	auditService.On("LogCallbackDelivery", mock.Anything, mock.Anything).Return(nil).Maybe()
+
 	fulfillmentID := uuid.New().String()
 	orderRecord := &OrderRecord{
 		DispatchOrderID: dispatchOrderID,

@@ -175,6 +175,9 @@ func TestInitHandler_Success(t *testing.T) {
 		return strings.HasSuffix(url, "/on_init")
 	}), mock.Anything).Return(nil).Maybe()
 
+	auditService.On("LogRequestResponse", mock.Anything, mock.Anything).Return(nil)
+	auditService.On("LogCallbackDelivery", mock.Anything, mock.Anything).Return(nil).Maybe()
+
 	// Create request
 	requestBody := map[string]interface{}{
 		"context": map[string]interface{}{
@@ -276,6 +279,8 @@ func TestInitHandler_InvalidSearchID(t *testing.T) {
 
 	// Mock Order Service validation failure (search_id expired)
 	orderServiceClient.On("ValidateSearchIDTTL", mock.Anything, searchID).Return(false, errors.NewDomainError(65004, "quote expired", "search_id TTL expired"))
+
+	auditService.On("LogRequestResponse", mock.Anything, mock.Anything).Return(nil)
 
 	// Create request
 	requestBody := map[string]interface{}{
@@ -380,6 +385,9 @@ func TestInitHandler_QuoteInvalidated(t *testing.T) {
 	callbackService.On("SendCallback", mock.Anything, mock.MatchedBy(func(url string) bool {
 		return strings.HasSuffix(url, "/on_init")
 	}), mock.Anything).Return(nil).Maybe()
+
+	auditService.On("LogRequestResponse", mock.Anything, mock.Anything).Return(nil)
+	auditService.On("LogCallbackDelivery", mock.Anything, mock.Anything).Return(nil).Maybe()
 
 	requestBody := map[string]interface{}{
 		"context": map[string]interface{}{

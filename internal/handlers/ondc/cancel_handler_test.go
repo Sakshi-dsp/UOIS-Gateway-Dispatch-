@@ -49,6 +49,9 @@ func TestCancelHandler_Success(t *testing.T) {
 
 	orderServiceClient.On("CancelOrder", mock.Anything, dispatchOrderID, mock.AnythingOfType("string")).Return(nil)
 
+	auditService.On("LogRequestResponse", mock.Anything, mock.Anything).Return(nil).Maybe()
+	auditService.On("LogCallbackDelivery", mock.Anything, mock.Anything).Return(nil).Maybe()
+
 	callbackService.On("SendCallback", mock.Anything, mock.MatchedBy(func(url string) bool {
 		return strings.HasSuffix(url, "/on_cancel")
 	}), mock.Anything).Return(nil).Maybe()
@@ -95,4 +98,5 @@ func TestCancelHandler_Success(t *testing.T) {
 	idempotencyService.AssertExpectations(t)
 	orderServiceClient.AssertExpectations(t)
 	orderRecordService.AssertExpectations(t)
+	auditService.AssertExpectations(t)
 }

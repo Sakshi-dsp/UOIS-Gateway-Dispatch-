@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/spf13/viper"
+	"github.com/subosito/gotenv"
 )
 
 type Config struct {
@@ -162,6 +163,17 @@ type RateLimitConfig struct {
 }
 
 func LoadConfig() (*Config, error) {
+	// Load .env file if it exists (check multiple locations)
+	envPaths := []string{".env", "./.env", "../.env"}
+	for _, envPath := range envPaths {
+		if _, err := os.Stat(envPath); err == nil {
+			if err := gotenv.Load(envPath); err != nil {
+				return nil, fmt.Errorf("failed to load .env file from %s: %w", envPath, err)
+			}
+			break
+		}
+	}
+
 	viper.SetConfigType("env")
 	viper.AutomaticEnv()
 

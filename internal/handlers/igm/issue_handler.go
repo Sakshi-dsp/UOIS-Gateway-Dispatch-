@@ -84,16 +84,17 @@ func (h *IssueHandler) HandleIssue(c *gin.Context) {
 		return
 	}
 
+	// Client ID available from middleware if needed
+	_, _ = c.Get("client")
+
+	// Set timestamps before validation (validation requires CreatedAt)
+	issue.CreatedAt = time.Now()
+	issue.UpdatedAt = time.Now()
+
 	if err := issue.Validate(); err != nil {
 		h.respondNACK(c, errors.NewDomainError(65001, "invalid issue", err.Error()))
 		return
 	}
-
-	// Client ID available from middleware if needed
-	_, _ = c.Get("client")
-
-	issue.CreatedAt = time.Now()
-	issue.UpdatedAt = time.Now()
 
 	if err := h.issueRepository.StoreIssue(ctx, issue); err != nil {
 		h.logger.Error("failed to store issue", zap.Error(err), zap.String("trace_id", traceID))

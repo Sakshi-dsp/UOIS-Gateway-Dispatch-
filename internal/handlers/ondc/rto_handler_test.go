@@ -53,6 +53,9 @@ func TestRTOHandler_Success(t *testing.T) {
 		return strings.HasSuffix(url, "/on_update")
 	}), mock.Anything).Return(nil).Maybe()
 
+	auditService.On("LogRequestResponse", mock.Anything, mock.Anything).Return(nil)
+	auditService.On("LogCallbackDelivery", mock.Anything, mock.Anything).Return(nil).Maybe()
+
 	requestBody := map[string]interface{}{
 		"context": map[string]interface{}{
 			"domain":         "nic2004:52110",

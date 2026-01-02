@@ -120,21 +120,25 @@ func TestIssueHandler_HandleIssue_Success(t *testing.T) {
 	mockGRO.On("GetGRODetails", mock.Anything, models.IssueTypeIssue).Return(&models.GRO{Level: "L1"}, nil)
 	mockCallback.On("SendCallback", mock.Anything, mock.Anything, mock.Anything).Return(nil)
 
+	bodyBytes, _ := json.Marshal(reqBody)
 	w := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(w)
-	c.Request = httptest.NewRequest("POST", "/issue", nil)
-	c.Set("client", &models.Client{ID: "client-1"})
-
+	c.Request = httptest.NewRequest("POST", "/issue", bytes.NewReader(bodyBytes))
 	c.Request.Header.Set("Content-Type", "application/json")
-	bodyBytes, _ := json.Marshal(reqBody)
-	c.Request.Body = http.MaxBytesReader(w, httptest.NewRequest("POST", "/issue", bytes.NewReader(bodyBytes)).Body, 1048576)
+	c.Set("client", &models.Client{ID: "client-1"})
 
 	handler.HandleIssue(c)
 
+	if w.Code != http.StatusOK {
+		t.Logf("Response body: %s", w.Body.String())
+	}
 	assert.Equal(t, http.StatusOK, w.Code)
 	mockRepo.AssertExpectations(t)
-	mockCallback.AssertExpectations(t)
 	mockIdempotency.AssertExpectations(t)
+
+	// Wait for goroutine to complete (callback is sent asynchronously)
+	time.Sleep(100 * time.Millisecond)
+	mockCallback.AssertExpectations(t)
 }
 
 func TestIssueHandler_HandleOnIssue_Success(t *testing.T) {

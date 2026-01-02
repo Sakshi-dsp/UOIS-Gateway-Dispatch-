@@ -145,25 +145,27 @@ func (r *RetryService) SendCallbackWithRetry(
 
 // calculateBackoff calculates exponential backoff duration bounded by TTL
 func (r *RetryService) calculateBackoff(attempt int, ttlSeconds int) time.Duration {
-	if attempt <= 0 || len(r.config.CallbackBackoff) == 0 {
+	if attempt <= 0 {
 		return 0
 	}
 
 	// Use configured backoff if available
-	backoffIndex := attempt - 1
-	if backoffIndex < len(r.config.CallbackBackoff) {
-		backoffSeconds := r.config.CallbackBackoff[backoffIndex]
-		backoffDuration := time.Duration(backoffSeconds) * time.Second
+	if len(r.config.CallbackBackoff) > 0 {
+		backoffIndex := attempt - 1
+		if backoffIndex < len(r.config.CallbackBackoff) {
+			backoffSeconds := r.config.CallbackBackoff[backoffIndex]
+			backoffDuration := time.Duration(backoffSeconds) * time.Second
 
-		// Ensure backoff doesn't exceed remaining TTL
-		if ttlSeconds > 0 {
-			remainingTTL := time.Duration(ttlSeconds) * time.Second
-			if backoffDuration > remainingTTL {
-				backoffDuration = remainingTTL
+			// Ensure backoff doesn't exceed remaining TTL
+			if ttlSeconds > 0 {
+				remainingTTL := time.Duration(ttlSeconds) * time.Second
+				if backoffDuration > remainingTTL {
+					backoffDuration = remainingTTL
+				}
 			}
-		}
 
-		return backoffDuration
+			return backoffDuration
+		}
 	}
 
 	// Fallback: exponential backoff (2^attempt seconds, max 30s)

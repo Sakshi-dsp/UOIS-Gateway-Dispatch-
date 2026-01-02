@@ -57,10 +57,6 @@ func TestIssueRepository_StoreIssue_Success(t *testing.T) {
 		UpdatedAt:     time.Now(),
 	}
 
-	stringCmd := redis.NewStringCmd(context.Background())
-	stringCmd.SetErr(redis.Nil)
-	mockRedis.On("Get", mock.Anything, mock.Anything).Return(stringCmd)
-
 	statusCmd := redis.NewStatusCmd(context.Background())
 	statusCmd.SetVal("OK")
 	mockRedis.On("Set", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(statusCmd)
