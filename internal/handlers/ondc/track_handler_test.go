@@ -26,8 +26,9 @@ func TestTrackHandler_Success(t *testing.T) {
 	orderServiceClient := new(mockOrderServiceClient)
 	orderRecordService := new(mockOrderRecordService)
 	auditService := new(mockAuditService)
+	cacheService := new(mockCacheService)
 
-	handler := NewTrackHandler(callbackService, idempotencyService, orderServiceClient, orderRecordService, auditService, "test-bpp-id", "https://bpp.example.com", logger)
+	handler := NewTrackHandler(callbackService, idempotencyService, orderServiceClient, orderRecordService, auditService, cacheService, "test-bpp-id", "https://bpp.example.com", logger)
 
 	clientOrderID := uuid.New().String()
 	dispatchOrderID := uuid.New().String()
@@ -36,6 +37,10 @@ func TestTrackHandler_Success(t *testing.T) {
 
 	idempotencyService.On("CheckIdempotency", mock.Anything, mock.AnythingOfType("string")).Return(nil, false, nil)
 	idempotencyService.On("StoreIdempotency", mock.Anything, mock.AnythingOfType("string"), mock.Anything, mock.AnythingOfType("time.Duration")).Return(nil)
+
+	// Mock cache miss
+	cacheService.On("Get", mock.Anything, mock.AnythingOfType("string"), mock.Anything).Return(false, nil)
+	cacheService.On("Set", mock.Anything, mock.AnythingOfType("string"), mock.Anything).Return(nil).Maybe()
 
 	fulfillmentID := uuid.New().String()
 	orderRecord := &OrderRecord{

@@ -24,6 +24,13 @@ type CallbackService interface {
 	SendCallback(ctx context.Context, callbackURL string, payload interface{}) error
 }
 
+// CacheService provides caching functionality
+type CacheService interface {
+	Get(ctx context.Context, key string, dest interface{}) (bool, error)
+	Set(ctx context.Context, key string, value interface{}) error
+	Delete(ctx context.Context, key string) error
+}
+
 // IdempotencyService handles request idempotency checks and storage
 type IdempotencyService interface {
 	CheckIdempotency(ctx context.Context, key string) ([]byte, bool, error)

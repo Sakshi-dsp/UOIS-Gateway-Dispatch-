@@ -1961,6 +1961,122 @@ If write volume or cost becomes a concern, consider:
   - Maintain log integrity and non-repudiation
   - Store in Postgres-E (`audit.request_response_logs`) with 7-year retention
 
+- **Metrics & Monitoring**:
+  
+  **Version Scope**:
+  - **v1 (Current)**: Business Metrics, Latency Metrics, Error Metrics, Service Health Metrics, Cache Metrics, Idempotency Metrics, ONDC-Specific Metrics, IGM Metrics, Database Metrics, SLO/SLI Metrics
+  - **v2 (Future)**: Event Processing Metrics, Client Registry Metrics, Alerting Thresholds
+  
+  - **Business Metrics** (Counters) - **v1**:
+    - `uois.requests.total` - Total incoming requests by endpoint (`/search`, `/init`, `/confirm`, `/status`, `/track`, `/cancel`, `/update`, `/rto`), client_id, protocol (ONDC/BECKN), status (success/error)
+    - `uois.orders.created.total` - Orders created via `/confirm` (by client_id, status)
+    - `uois.quotes.computed.total` - Quotes computed for `/search` (by client_id, serviceable/non-serviceable)
+    - `uois.quotes.created.total` - Quotes created for `/init` (by client_id, status)
+    - `uois.callbacks.delivered.total` - Callbacks delivered successfully (by callback type: `/on_search`, `/on_init`, `/on_confirm`, etc., client_id)
+    - `uois.callbacks.failed.total` - Callback delivery failures (by callback type, error_code, client_id)
+    - `uois.issues.created.total` - IGM issues created (by client_id, category, type)
+    - `uois.issues.resolved.total` - IGM issues resolved (by client_id, resolution_time_bucket)
+  
+  - **Latency Metrics** (Histograms/Distributions) - **v1**:
+    - `uois.request.duration` - Request processing time by endpoint, client_id, status (p50, p95, p99)
+    - `uois.callback.delivery.duration` - Callback delivery time by callback type, client_id (p50, p95, p99)
+    - `uois.event.processing.duration` - Event processing time by event type (`QUOTE_COMPUTED`, `QUOTE_CREATED`, `ORDER_CONFIRMED`, etc.)
+    - `uois.db.query.duration` - Database query time by query type (audit_log_insert, client_lookup, order_lookup)
+    - `uois.grpc.call.duration` - gRPC call duration to Order Service by method (`GetOrder`, `CancelOrder`, etc.)
+    - `uois.auth.duration` - Authentication/authorization time (client lookup, credential validation)
+  
+  - **Error Metrics** (Counters) - **v1**:
+    - `uois.errors.total` - Total errors by error_code (`65001`, `65002`, `65003`, etc.), endpoint, client_id
+    - `uois.errors.by_category` - Errors by category (validation, authentication, dependency, internal)
+    - `uois.timeouts.total` - Request timeouts by endpoint, dependency (Order Service, Quote Service, Location Service)
+    - `uois.rate_limit.exceeded.total` - Rate limit violations by client_id, endpoint
+    - `uois.callback.retries.total` - Callback retry attempts by callback type, attempt_number
+  
+  - **Service Health Metrics** (Gauges) - **v1**:
+    - `uois.service.availability` - Service availability (1 = healthy, 0 = unhealthy)
+    - `uois.dependencies.health` - Dependency health status (Order Service, Quote Service, Location Service, Admin Service, Postgres-E, Redis) - 1 = healthy, 0 = unhealthy
+    - `uois.dependencies.latency` - Dependency latency by service (p95, p99)
+    - `uois.circuit_breaker.state` - Circuit breaker state by dependency (closed/open/half-open)
+    - `uois.db.connection.pool.active` - Active database connections
+    - `uois.db.connection.pool.idle` - Idle database connections
+    - `uois.redis.connection.pool.active` - Active Redis connections
+  
+  - **Cache Metrics** (Counters/Gauges) - **v1**:
+    - `uois.cache.hits.total` - Cache hits by cache type (client_registry, order_reference, client_config)
+    - `uois.cache.misses.total` - Cache misses by cache type
+    - `uois.cache.hit_rate` - Cache hit rate by cache type (hits / (hits + misses))
+    - `uois.cache.size` - Cache size by cache type (number of entries)
+    - `uois.cache.evictions.total` - Cache evictions by cache type (LRU evictions)
+  
+  - **Idempotency Metrics** (Counters) - **v1**:
+    - `uois.idempotency.duplicate_requests.total` - Duplicate requests detected by endpoint, idempotency_key_type
+    - `uois.idempotency.replays.total` - Idempotent request replays (returned cached response)
+  
+  - **ONDC-Specific Metrics** (Counters) - **v1**:
+    - `uois.ondc.signature.verifications.total` - ONDC signature verifications by status (success/failure), reason
+    - `uois.ondc.signature.generation.total` - ONDC signature generations by status (success/failure)
+    - `uois.ondc.registry.lookups.total` - ONDC network registry lookups by status (success/failure, cache_hit/cache_miss)
+    - `uois.ondc.timestamp.validations.total` - Timestamp validations by status (valid/invalid/stale)
+  
+  - **IGM Metrics** (Counters/Gauges) - **v1**:
+    - `uois.igm.zendesk.tickets.created.total` - Zendesk tickets created (by issue_type, priority)
+    - `uois.igm.zendesk.tickets.updated.total` - Zendesk tickets updated (by status_change)
+    - `uois.igm.zendesk.webhooks.received.total` - Zendesk webhooks received (by event_type)
+    - `uois.igm.zendesk.sync.lag` - Time between Zendesk update and ONDC callback (seconds)
+    - `uois.igm.issues.by_status` - Current issue count by status (OPEN, CLOSED, IN_PROGRESS)
+    - `uois.igm.issues.resolution_time` - Issue resolution time by issue_type (histogram)
+  
+  - **Database Metrics** (Gauges) - **v1**:
+    - `uois.db.audit_logs.written.total` - Audit log writes by status (success/failure)
+    - `uois.db.audit_logs.size` - Total audit log entries (approximate count)
+    - `uois.db.query.errors.total` - Database query errors by query_type, error_code
+    - `uois.db.transaction.duration` - Database transaction duration by operation_type
+  
+  - **SLO/SLI Metrics** (Derived from above) - **v1**:
+    - **Availability SLI**: `(total_requests - errors_5xx) / total_requests` (target: 99.9%)
+    - **Latency SLI**: `p95_latency` by endpoint (targets: `/search` < 500ms, `/confirm` < 1s, `/status` < 200ms, callbacks < 2s)
+    - **Error Rate SLI**: `errors_total / total_requests` (target: < 0.1%)
+    - **Callback Success Rate SLI**: `callbacks_delivered / (callbacks_delivered + callbacks_failed)` (target: > 99%)
+    - **Event Processing Lag SLI**: `event_processing_lag` (target: < 5 seconds p95) - **v2**
+  
+  - **Metric Labels/Tags**:
+    - **Required labels**: `service=uois-gateway`, `environment` (sandbox/production), `instance_id`
+    - **Optional labels**: `client_id`, `endpoint`, `protocol` (ONDC/BECKN), `error_code`, `event_type`, `callback_type`, `dependency_name`
+    - **Cardinality consideration**: Limit high-cardinality labels (e.g., `client_id` only for business metrics, not technical metrics)
+  
+  - **Metric Export**:
+    - Export metrics in Prometheus format (OpenMetrics)
+    - Expose metrics endpoint: `/metrics` (standard Prometheus scrape endpoint)
+    - Push metrics to CloudWatch Metrics (AWS) or equivalent
+    - Support metric aggregation and retention policies (1-minute granularity for 7 days, 5-minute for 30 days, 1-hour for 1 year)
+  
+  - **Event Processing Metrics** (Counters/Gauges) - **v2**:
+    - `uois.events.published.total` - Events published by event type (`SEARCH_REQUESTED`, `INIT_REQUESTED`, `CONFIRM_REQUESTED`), status (success/failure)
+    - `uois.events.consumed.total` - Events consumed by event type (`QUOTE_COMPUTED`, `QUOTE_CREATED`, `ORDER_CONFIRMED`), status (success/failure)
+    - `uois.events.processing.lag` - Event processing lag by stream (time between event published and consumed)
+    - `uois.events.consumer_group.lag` - Redis Stream consumer group lag by stream (`quote:computed`, `stream.uois.quote_created`, etc.)
+    - `uois.events.ack.total` - Events ACKed by consumer group, stream
+    - `uois.events.failed.total` - Event processing failures by event type, error_code
+    - `uois.events.publish.rate` - Event publish rate (events/second) by event type
+    - `uois.events.consume.rate` - Event consume rate (events/second) by event type
+  
+  - **Client Registry Metrics** (Counters/Gauges) - **v2**:
+    - `uois.client.registry.lookups.total` - Client registry lookups by source (cache/db/fallback)
+    - `uois.client.registry.sync.total` - Client registry sync events processed (by event_type: `client.created`, `client.updated`, `client.suspended`, `client.revoked`, `client.api_key_rotated`)
+    - `uois.client.registry.size` - Total number of active clients in registry
+    - `uois.client.registry.sync.lag` - Time between Admin Service event and local registry update (seconds)
+  
+  - **Alerting Thresholds** (Derived from SLOs) - **v2**:
+    - **Availability**: Alert if availability < 99.9% over 5-minute window
+    - **Latency**: Alert if p95 latency exceeds targets (`/search` > 500ms, `/confirm` > 1s, `/status` > 200ms) over 5-minute window
+    - **Error Rate**: Alert if error rate > 1% over 5-minute window
+    - **Dependency Health**: Alert if any dependency (Order Service, Quote Service, Postgres-E, Redis) is unhealthy
+    - **Callback Failure Rate**: Alert if callback failure rate > 5% over 5-minute window
+    - **Event Processing Lag**: Alert if event processing lag > 30 seconds (p95) over 5-minute window
+    - **Database Connection Pool**: Alert if connection pool utilization > 80%
+    - **Circuit Breaker**: Alert if circuit breaker opens (dependency failure)
+    - **Client Registry Sync Lag**: Alert if sync lag > 60 seconds over 5-minute window
+
 ---
 
 ## 12. Non-Functional Requirements

@@ -7,6 +7,7 @@ import (
 
 	"uois-gateway/internal/config"
 	"uois-gateway/internal/handlers/ondc"
+	circuitbreaker "uois-gateway/internal/services/circuitbreaker"
 
 	"go.uber.org/zap"
 )
@@ -14,15 +15,21 @@ import (
 // Client handles Order Service gRPC calls
 // TODO: Implement actual gRPC client when Order Service is available
 type Client struct {
-	config config.OrderConfig
-	logger *zap.Logger
+	config         config.OrderConfig
+	logger         *zap.Logger
+	circuitBreaker *circuitbreaker.CircuitBreaker
 }
 
 // NewClient creates a new Order Service client
 func NewClient(cfg config.OrderConfig, logger *zap.Logger) *Client {
+	cbConfig := circuitbreaker.DefaultConfig()
+	cbConfig.FailureThreshold = 5
+	cbConfig.Timeout = 60 * time.Second
+
 	return &Client{
-		config: cfg,
-		logger: logger,
+		config:         cfg,
+		logger:         logger,
+		circuitBreaker: circuitbreaker.NewCircuitBreaker(cbConfig),
 	}
 }
 
@@ -42,23 +49,33 @@ func (c *Client) ValidateQuoteIDTTL(ctx context.Context, quoteID string) (bool, 
 
 // GetOrder retrieves order status from Order Service
 func (c *Client) GetOrder(ctx context.Context, dispatchOrderID string) (*ondc.OrderStatus, error) {
-	// TODO: Implement gRPC call to Order Service
-	c.logger.Info("getting order", zap.String("dispatch_order_id", dispatchOrderID))
-	return &ondc.OrderStatus{
-		DispatchOrderID: dispatchOrderID,
-		State:           "IN_PROGRESS",
-	}, nil
+	var result *ondc.OrderStatus
+	err := c.circuitBreaker.Execute(ctx, func() error {
+		// TODO: Implement gRPC call to Order Service
+		c.logger.Info("getting order", zap.String("dispatch_order_id", dispatchOrderID))
+		result = &ondc.OrderStatus{
+			DispatchOrderID: dispatchOrderID,
+			State:           "IN_PROGRESS",
+		}
+		return nil
+	})
+	return result, err
 }
 
 // GetOrderTracking retrieves order tracking information
 func (c *Client) GetOrderTracking(ctx context.Context, dispatchOrderID string) (*ondc.OrderTracking, error) {
-	// TODO: Implement gRPC call to Order Service
-	c.logger.Info("getting order tracking", zap.String("dispatch_order_id", dispatchOrderID))
-	return &ondc.OrderTracking{
-		DispatchOrderID: dispatchOrderID,
-		TrackingURL:     fmt.Sprintf("https://track.example.com/%s", dispatchOrderID),
-		ETA:             time.Now().Add(1 * time.Hour),
-	}, nil
+	var result *ondc.OrderTracking
+	err := c.circuitBreaker.Execute(ctx, func() error {
+		// TODO: Implement gRPC call to Order Service
+		c.logger.Info("getting order tracking", zap.String("dispatch_order_id", dispatchOrderID))
+		result = &ondc.OrderTracking{
+			DispatchOrderID: dispatchOrderID,
+			TrackingURL:     fmt.Sprintf("https://track.example.com/%s", dispatchOrderID),
+			ETA:             time.Now().Add(1 * time.Hour),
+		}
+		return nil
+	})
+	return result, err
 }
 
 // CancelOrder cancels an order

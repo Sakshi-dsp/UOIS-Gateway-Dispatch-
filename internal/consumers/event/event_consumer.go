@@ -29,6 +29,11 @@ type StreamConsumerClient interface {
 	XAck(ctx context.Context, stream, group, id string) *redis.IntCmd
 }
 
+// EventIdempotencyService interface for event-level idempotency
+type EventIdempotencyService interface {
+	CheckAndStore(ctx context.Context, eventID string) (bool, error)
+}
+
 // Consumer consumes events from Redis streams with business ID filtering
 //
 // CRITICAL: This consumer implements event isolation to prevent consuming
@@ -51,9 +56,10 @@ type StreamConsumerClient interface {
 // For stronger isolation, consider using Option A: stream keys with business ID
 // (e.g., "stream.uois.quote_created:<quote_id>") instead of filtering.
 type Consumer struct {
-	rdb    StreamConsumerClient
-	config config.StreamsConfig
-	logger *zap.Logger
+	rdb                     StreamConsumerClient
+	config                  config.StreamsConfig
+	logger                  *zap.Logger
+	eventIdempotencyService EventIdempotencyService
 }
 
 // NewConsumer creates a new event consumer
@@ -62,6 +68,16 @@ func NewConsumer(rdb StreamConsumerClient, cfg config.StreamsConfig, logger *zap
 		rdb:    rdb,
 		config: cfg,
 		logger: logger,
+	}
+}
+
+// NewConsumerWithIdempotency creates a new event consumer with event idempotency support
+func NewConsumerWithIdempotency(rdb StreamConsumerClient, cfg config.StreamsConfig, eventIdempotencyService EventIdempotencyService, logger *zap.Logger) *Consumer {
+	return &Consumer{
+		rdb:                     rdb,
+		config:                  cfg,
+		logger:                  logger,
+		eventIdempotencyService: eventIdempotencyService,
 	}
 }
 

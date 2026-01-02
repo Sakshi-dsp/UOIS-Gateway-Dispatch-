@@ -152,12 +152,11 @@ func TestAuditRepository_StoreCallbackDeliveryLog_WithError(t *testing.T) {
 
 	mock.ExpectExec(`INSERT INTO audit\.callback_delivery_logs`).
 		WithArgs(
-			sqlmock.AnyArg(),
+			sqlmock.AnyArg(), // request_id
 			log.CallbackURL,
 			log.AttemptNo,
 			log.Status,
 			log.Error,
-			sqlmock.AnyArg(),
 		).
 		WillReturnResult(sqlmock.NewResult(1, 1))
 

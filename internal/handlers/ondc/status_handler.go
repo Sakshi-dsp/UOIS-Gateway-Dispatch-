@@ -24,6 +24,7 @@ type StatusHandler struct {
 	orderServiceClient OrderServiceClient
 	orderRecordService OrderRecordService
 	auditService       AuditService
+	cacheService       CacheService
 	bppID              string // BPP ID (ONDC-registered Seller NP identity)
 	bppURI             string // BPP URI
 	logger             *zap.Logger
@@ -36,6 +37,7 @@ func NewStatusHandler(
 	orderServiceClient OrderServiceClient,
 	orderRecordService OrderRecordService,
 	auditService AuditService,
+	cacheService CacheService,
 	bppID string,
 	bppURI string,
 	logger *zap.Logger,
@@ -46,6 +48,7 @@ func NewStatusHandler(
 		orderServiceClient: orderServiceClient,
 		orderRecordService: orderRecordService,
 		auditService:       auditService,
+		cacheService:       cacheService,
 		bppID:              bppID,
 		bppURI:             bppURI,
 		logger:             logger,
@@ -119,17 +122,39 @@ func (h *StatusHandler) HandleStatus(c *gin.Context) {
 		return
 	}
 
-	// Call Order Service GetOrder
-	orderStatus, err := h.orderServiceClient.GetOrder(ctx, dispatchOrderID)
-	if err != nil {
-		h.logger.Error("failed to get order status", zap.Error(err), zap.String("trace_id", traceID), zap.String("dispatch_order_id", dispatchOrderID))
-		domainErr, ok := err.(*errors.DomainError)
-		if ok {
-			h.respondNACK(c, domainErr)
-		} else {
-			h.respondNACK(c, errors.NewDomainError(65020, "internal error", "failed to get order status"))
+	// Check cache first
+	cacheKey := fmt.Sprintf("status:%s:%s", clientID, orderID)
+	var orderStatus *OrderStatus
+	cached := false
+
+	if h.cacheService != nil {
+		var cachedStatus OrderStatus
+		if found, err := h.cacheService.Get(ctx, cacheKey, &cachedStatus); err == nil && found {
+			orderStatus = &cachedStatus
+			cached = true
+			h.logger.Debug("status retrieved from cache", zap.String("trace_id", traceID), zap.String("order.id", orderID))
 		}
-		return
+	}
+
+	// If not cached, call Order Service
+	if !cached {
+		var err error
+		orderStatus, err = h.orderServiceClient.GetOrder(ctx, dispatchOrderID)
+		if err != nil {
+			h.logger.Error("failed to get order status", zap.Error(err), zap.String("trace_id", traceID), zap.String("dispatch_order_id", dispatchOrderID))
+			domainErr, ok := err.(*errors.DomainError)
+			if ok {
+				h.respondNACK(c, domainErr)
+			} else {
+				h.respondNACK(c, errors.NewDomainError(65020, "internal error", "failed to get order status"))
+			}
+			return
+		}
+
+		// Cache the result
+		if h.cacheService != nil {
+			_ = h.cacheService.Set(ctx, cacheKey, orderStatus)
+		}
 	}
 
 	// Compose response

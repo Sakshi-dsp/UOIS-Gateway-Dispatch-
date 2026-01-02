@@ -80,6 +80,25 @@ func (m *mockAuditService) LogCallbackDelivery(ctx context.Context, req *audit.C
 	return args.Error(0)
 }
 
+type mockCacheService struct {
+	mock.Mock
+}
+
+func (m *mockCacheService) Get(ctx context.Context, key string, dest interface{}) (bool, error) {
+	args := m.Called(ctx, key, dest)
+	return args.Bool(0), args.Error(1)
+}
+
+func (m *mockCacheService) Set(ctx context.Context, key string, value interface{}) error {
+	args := m.Called(ctx, key, value)
+	return args.Error(0)
+}
+
+func (m *mockCacheService) Delete(ctx context.Context, key string) error {
+	args := m.Called(ctx, key)
+	return args.Error(0)
+}
+
 func TestSearchHandler_Success(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	logger := zap.NewNop()

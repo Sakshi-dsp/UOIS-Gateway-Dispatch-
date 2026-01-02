@@ -24,14 +24,19 @@ import (
 	"uois-gateway/internal/repository/order_record"
 	auditService "uois-gateway/internal/services/audit"
 	"uois-gateway/internal/services/auth"
+	cacheService "uois-gateway/internal/services/cache"
 	"uois-gateway/internal/services/callback"
 	"uois-gateway/internal/services/client"
+	eventIdempotencyService "uois-gateway/internal/services/eventidempotency"
 	"uois-gateway/internal/services/idempotency"
 	igmService "uois-gateway/internal/services/igm"
+	metricsService "uois-gateway/internal/services/metrics"
 	ondcService "uois-gateway/internal/services/ondc"
+	tracingService "uois-gateway/internal/services/tracing"
 
 	"github.com/gin-gonic/gin"
 	_ "github.com/lib/pq"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"go.uber.org/zap"
 )
 
@@ -94,7 +99,6 @@ func main() {
 		callbackSigner = nil
 	}
 
-	callbackService := callback.NewService(cfg.Callback, callbackSigner, logger)
 	idempotencyService := idempotency.NewService(redisClient.GetClient(), *cfg, logger)
 	orderServiceClient := order.NewClient(cfg.Order, logger)
 	eventPublisher := redis.NewEventPublisher(redisClient.GetClient(), logger)
@@ -103,9 +107,37 @@ func main() {
 	streamConsumerAdapter := redis.NewStreamConsumerAdapter(redisClient.GetClient())
 	consumerGroupAdapter := redis.NewConsumerGroupAdapter(redisClient.GetClient())
 
-	eventConsumer := event.NewConsumer(streamConsumerAdapter, cfg.Streams, logger)
+	// Initialize cache service
+	statusCacheTTL := 30 * time.Second // Short TTL for status
+	trackCacheTTL := 10 * time.Second  // Very short TTL for tracking
+	cacheServiceInstance := cacheService.NewService(redisClient.GetClient(), statusCacheTTL, logger)
+
+	// Initialize event idempotency service
+	eventIdempotencyInstance := eventIdempotencyService.NewService(redisClient.GetClient(), 24*time.Hour, logger)
+
+	// Initialize tracing service
+	tracingInstance := tracingService.NewService(cfg.ServiceName)
+	_ = tracingInstance // Will be used when integrating spans into handlers
+
+	// Create event consumer with idempotency support
+	eventConsumer := event.NewConsumerWithIdempotency(streamConsumerAdapter, cfg.Streams, eventIdempotencyInstance, logger)
+
 	groService := igmService.NewGROService(logger)
 	auditServiceInstance := auditService.NewService(auditRepoInstance, logger)
+
+	// Initialize metrics service
+	metricsInstance := metricsService.NewService(cfg.ServiceName, cfg.Env)
+	metricsInstance.SetServiceAvailability(true)
+
+	// Create callback service with retry support (after audit service is initialized)
+	callbackService := callback.NewServiceWithRetry(
+		cfg.Callback,
+		cfg.Retry,
+		callbackSigner,
+		redisClient.GetClient(),
+		auditServiceInstance,
+		logger,
+	)
 
 	// Initialize consumer groups
 	initCtx, initCancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -176,10 +208,14 @@ func main() {
 		orderServiceClientInterface,
 		orderRecordServiceInterface,
 		auditServiceInterface,
+		cacheServiceInstance,
 		cfg.ONDC.BPPID,
 		cfg.ONDC.BPPURI,
 		logger,
 	)
+
+	// Create track cache with shorter TTL
+	trackCacheService := cacheService.NewService(redisClient.GetClient(), trackCacheTTL, logger)
 
 	trackHandler := ondc.NewTrackHandler(
 		callbackServiceInterface,
@@ -187,6 +223,7 @@ func main() {
 		orderServiceClientInterface,
 		orderRecordServiceInterface,
 		auditServiceInterface,
+		trackCacheService,
 		cfg.ONDC.BPPID,
 		cfg.ONDC.BPPURI,
 		logger,
@@ -363,6 +400,9 @@ func setupRouter(
 	router.GET("/health", func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"status": "ok"})
 	})
+
+	// Prometheus metrics endpoint (no auth required)
+	router.GET("/metrics", gin.WrapH(promhttp.Handler()))
 
 	// ONDC API routes (require authentication and rate limiting)
 	ondcGroup := router.Group("/ondc")

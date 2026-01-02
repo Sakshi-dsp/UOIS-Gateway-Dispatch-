@@ -23,6 +23,7 @@ type TrackHandler struct {
 	orderServiceClient OrderServiceClient
 	orderRecordService OrderRecordService
 	auditService       AuditService
+	cacheService       CacheService
 	bppID              string // BPP ID (ONDC-registered Seller NP identity)
 	bppURI             string // BPP URI
 	logger             *zap.Logger
@@ -35,6 +36,7 @@ func NewTrackHandler(
 	orderServiceClient OrderServiceClient,
 	orderRecordService OrderRecordService,
 	auditService AuditService,
+	cacheService CacheService,
 	bppID string,
 	bppURI string,
 	logger *zap.Logger,
@@ -45,6 +47,7 @@ func NewTrackHandler(
 		orderServiceClient: orderServiceClient,
 		orderRecordService: orderRecordService,
 		auditService:       auditService,
+		cacheService:       cacheService,
 		bppID:              bppID,
 		bppURI:             bppURI,
 		logger:             logger,
@@ -112,16 +115,39 @@ func (h *TrackHandler) HandleTrack(c *gin.Context) {
 		return
 	}
 
-	orderTracking, err := h.orderServiceClient.GetOrderTracking(ctx, dispatchOrderID)
-	if err != nil {
-		h.logger.Error("failed to get order tracking", zap.Error(err), zap.String("trace_id", traceID), zap.String("dispatch_order_id", dispatchOrderID))
-		domainErr, ok := err.(*errors.DomainError)
-		if ok {
-			h.respondNACK(c, domainErr)
-		} else {
-			h.respondNACK(c, errors.NewDomainError(65020, "internal error", "failed to get order tracking"))
+	// Check cache first
+	cacheKey := fmt.Sprintf("track:%s:%s", clientID, orderID)
+	var orderTracking *OrderTracking
+	cached := false
+
+	if h.cacheService != nil {
+		var cachedTracking OrderTracking
+		if found, err := h.cacheService.Get(ctx, cacheKey, &cachedTracking); err == nil && found {
+			orderTracking = &cachedTracking
+			cached = true
+			h.logger.Debug("tracking retrieved from cache", zap.String("trace_id", traceID), zap.String("order.id", orderID))
 		}
-		return
+	}
+
+	// If not cached, call Order Service
+	if !cached {
+		var err error
+		orderTracking, err = h.orderServiceClient.GetOrderTracking(ctx, dispatchOrderID)
+		if err != nil {
+			h.logger.Error("failed to get order tracking", zap.Error(err), zap.String("trace_id", traceID), zap.String("dispatch_order_id", dispatchOrderID))
+			domainErr, ok := err.(*errors.DomainError)
+			if ok {
+				h.respondNACK(c, domainErr)
+			} else {
+				h.respondNACK(c, errors.NewDomainError(65020, "internal error", "failed to get order tracking"))
+			}
+			return
+		}
+
+		// Cache the result (very short TTL for tracking data)
+		if h.cacheService != nil {
+			_ = h.cacheService.Set(ctx, cacheKey, orderTracking)
+		}
 	}
 
 	// ONDC v1.2.0: /track is polling-based, SYNC response only
