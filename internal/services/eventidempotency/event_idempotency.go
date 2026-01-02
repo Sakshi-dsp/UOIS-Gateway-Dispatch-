@@ -11,15 +11,21 @@ import (
 	"go.uber.org/zap"
 )
 
+// RedisClient defines the Redis operations needed for event idempotency
+type RedisClient interface {
+	SetNX(ctx context.Context, key string, value interface{}, expiration time.Duration) *redis.BoolCmd
+	Exists(ctx context.Context, keys ...string) *redis.IntCmd
+}
+
 // Service handles event-level idempotency
 type Service struct {
-	redis  *redis.Client
+	redis  RedisClient
 	logger *zap.Logger
 	ttl    time.Duration
 }
 
 // NewService creates a new event idempotency service
-func NewService(redis *redis.Client, ttl time.Duration, logger *zap.Logger) *Service {
+func NewService(redis RedisClient, ttl time.Duration, logger *zap.Logger) *Service {
 	return &Service{
 		redis:  redis,
 		logger: logger,
@@ -72,4 +78,3 @@ func GenerateEventID(stream string, eventData interface{}) string {
 	hash := sha256.Sum256([]byte(data))
 	return hex.EncodeToString(hash[:16]) // Use first 16 bytes as event ID
 }
-
