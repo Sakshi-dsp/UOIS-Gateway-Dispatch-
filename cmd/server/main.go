@@ -297,6 +297,7 @@ func main() {
 		issueStatusHandler,
 		clientAuthServiceInterface,
 		rateLimitServiceInterface,
+		metricsInstance,
 		logger,
 	)
 
@@ -383,6 +384,7 @@ func setupRouter(
 	issueStatusHandler *igmHandler.IssueStatusHandler,
 	authService middleware.AuthService,
 	rateLimitService middleware.RateLimitService,
+	metricsService middleware.MetricsRecorder,
 	logger *zap.Logger,
 ) *gin.Engine {
 	// Set Gin mode based on environment
@@ -395,6 +397,7 @@ func setupRouter(
 	// Global middleware
 	router.Use(gin.Logger())
 	router.Use(gin.Recovery())
+	router.Use(middleware.MetricsMiddleware(metricsService, logger))
 
 	// Health check endpoint (no auth required)
 	router.GET("/health", func(c *gin.Context) {

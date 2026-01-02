@@ -1,0 +1,139 @@
+# Prometheus Alerting Rules for UOIS Gateway
+# These alerts enforce the Non-Functional Requirements (Section 12)
+
+groups:
+  - name: uois_gateway_slo
+    interval: 5m
+    rules:
+      # Latency SLO Alerts
+      - alert: LatencySLOViolation_Search
+        expr: |
+          histogram_quantile(0.95, 
+            sum(rate(uois_request_duration_seconds_bucket{endpoint="/ondc/search",status="success"}[5m])) by (le)
+          ) > 0.5
+        for: 5m
+        labels:
+          severity: warning
+          endpoint: "/ondc/search"
+          slo_type: "latency"
+        annotations:
+          summary: "Search endpoint p95 latency exceeds SLO"
+          description: "Search endpoint p95 latency is {{ $value }}s (SLO: 500ms) for 5 minutes"
+
+      - alert: LatencySLOViolation_Confirm
+        expr: |
+          histogram_quantile(0.95, 
+            sum(rate(uois_request_duration_seconds_bucket{endpoint="/ondc/confirm",status="success"}[5m])) by (le)
+          ) > 1.0
+        for: 5m
+        labels:
+          severity: warning
+          endpoint: "/ondc/confirm"
+          slo_type: "latency"
+        annotations:
+          summary: "Confirm endpoint p95 latency exceeds SLO"
+          description: "Confirm endpoint p95 latency is {{ $value }}s (SLO: 1s) for 5 minutes"
+
+      - alert: LatencySLOViolation_Status
+        expr: |
+          histogram_quantile(0.95, 
+            sum(rate(uois_request_duration_seconds_bucket{endpoint="/ondc/status",status="success"}[5m])) by (le)
+          ) > 0.2
+        for: 5m
+        labels:
+          severity: warning
+          endpoint: "/ondc/status"
+          slo_type: "latency"
+        annotations:
+          summary: "Status endpoint p95 latency exceeds SLO"
+          description: "Status endpoint p95 latency is {{ $value }}s (SLO: 200ms) for 5 minutes"
+
+      - alert: LatencySLOViolation_Callback
+        expr: |
+          histogram_quantile(0.95, 
+            sum(rate(uois_callback_delivery_duration_seconds_bucket[5m])) by (le)
+          ) > 2.0
+        for: 5m
+        labels:
+          severity: warning
+          endpoint: "callback"
+          slo_type: "latency"
+        annotations:
+          summary: "Callback delivery p95 latency exceeds SLO"
+          description: "Callback delivery p95 latency is {{ $value }}s (SLO: 2s) for 5 minutes"
+
+      # Availability SLO Alert (99.9%)
+      - alert: AvailabilitySLOViolation
+        expr: |
+          (
+            sum(rate(uois_requests_total{status="success"}[5m])) /
+            sum(rate(uois_requests_total[5m]))
+          ) < 0.999
+        for: 5m
+        labels:
+          severity: critical
+          slo_type: "availability"
+        annotations:
+          summary: "Service availability below 99.9% SLO"
+          description: "Service availability is {{ $value | humanizePercentage }} (SLO: 99.9%) for 5 minutes"
+
+      # Error Rate Alert
+      - alert: HighErrorRate
+        expr: |
+          (
+            sum(rate(uois_errors_total[5m])) /
+            sum(rate(uois_requests_total[5m]))
+          ) > 0.01
+        for: 5m
+        labels:
+          severity: warning
+          slo_type: "error_rate"
+        annotations:
+          summary: "High error rate detected"
+          description: "Error rate is {{ $value | humanizePercentage }} (threshold: 1%) for 5 minutes"
+
+      # Throughput Alert (if below minimum)
+      - alert: LowThroughput
+        expr: |
+          sum(rate(uois_requests_total[5m])) < 1000
+        for: 10m
+        labels:
+          severity: info
+          slo_type: "throughput"
+        annotations:
+          summary: "Throughput below minimum requirement"
+          description: "Current throughput is {{ $value }} req/s (minimum: 1000 req/s) for 10 minutes"
+
+  - name: uois_gateway_health
+    interval: 1m
+    rules:
+      # Service Health
+      - alert: ServiceUnhealthy
+        expr: uois_service_availability == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "UOIS Gateway service is unhealthy"
+          description: "Service availability metric indicates unhealthy state"
+
+      # Dependency Health
+      - alert: DependencyUnhealthy
+        expr: uois_dependencies_health < 1
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Dependency {{ $labels.dependency }} is unhealthy"
+          description: "Dependency health check failed for {{ $labels.dependency }}"
+
+      # Circuit Breaker Open
+      - alert: CircuitBreakerOpen
+        expr: uois_circuit_breaker_state == 1
+        for: 1m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Circuit breaker open for {{ $labels.dependency }}"
+          description: "Circuit breaker is open, requests are being rejected"
+

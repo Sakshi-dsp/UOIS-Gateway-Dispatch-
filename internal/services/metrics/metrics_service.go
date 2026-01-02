@@ -69,6 +69,11 @@ type Service struct {
 	dbAuditLogsSize         prometheus.Gauge
 	dbQueryErrorsTotal      prometheus.Counter
 	dbTransactionDuration   *prometheus.HistogramVec
+
+	// SLO/SLI Metrics
+	latencySLIViolations      *prometheus.CounterVec
+	availabilitySLI           prometheus.Gauge
+	availabilitySLIViolations prometheus.Counter
 }
 
 // NewService creates a new metrics service
@@ -383,6 +388,27 @@ func NewService(serviceName, environment string) *Service {
 			},
 			[]string{"transaction_type"},
 		),
+
+		// SLO/SLI Metrics
+		latencySLIViolations: promauto.NewCounterVec(
+			prometheus.CounterOpts{
+				Name: "uois_latency_sli_violations_total",
+				Help: "Total latency SLO violations by endpoint",
+			},
+			[]string{"endpoint"},
+		),
+		availabilitySLI: promauto.NewGauge(
+			prometheus.GaugeOpts{
+				Name: "uois_availability_sli",
+				Help: "Current availability SLI (0-1)",
+			},
+		),
+		availabilitySLIViolations: promauto.NewCounter(
+			prometheus.CounterOpts{
+				Name: "uois_availability_sli_violations_total",
+				Help: "Total availability SLO violations",
+			},
+		),
 	}
 }
 
@@ -607,4 +633,19 @@ func (s *Service) SetDBAuditLogsSize(size float64) {
 // RecordDBTransactionDuration records database transaction duration
 func (s *Service) RecordDBTransactionDuration(transactionType string, duration time.Duration) {
 	s.dbTransactionDuration.WithLabelValues(transactionType).Observe(duration.Seconds())
+}
+
+// RecordLatencySLIViolation records a latency SLO violation
+func (s *Service) RecordLatencySLIViolation(endpoint string) {
+	s.latencySLIViolations.WithLabelValues(endpoint).Inc()
+}
+
+// SetAvailabilitySLI sets the current availability SLI
+func (s *Service) SetAvailabilitySLI(availability float64) {
+	s.availabilitySLI.Set(availability)
+}
+
+// RecordAvailabilitySLIViolation records an availability SLO violation
+func (s *Service) RecordAvailabilitySLIViolation() {
+	s.availabilitySLIViolations.Inc()
 }
