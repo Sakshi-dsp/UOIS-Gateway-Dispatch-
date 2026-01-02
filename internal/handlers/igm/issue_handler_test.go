@@ -1,6 +1,7 @@
 package igm
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"net/http"
@@ -91,13 +92,13 @@ func TestIssueHandler_HandleIssue_Success(t *testing.T) {
 
 	reqBody := map[string]interface{}{
 		"context": map[string]interface{}{
-			"domain":      "nic2004:60232",
-			"action":      "issue",
-			"bap_id":      "buyer-1",
-			"bap_uri":     "https://buyer.example.com",
+			"domain":         "nic2004:60232",
+			"action":         "issue",
+			"bap_id":         "buyer-1",
+			"bap_uri":        "https://buyer.example.com",
 			"transaction_id": "txn-123",
-			"message_id":  "msg-456",
-			"timestamp":   time.Now().Format(time.RFC3339),
+			"message_id":     "msg-456",
+			"timestamp":      time.Now().Format(time.RFC3339),
 		},
 		"message": map[string]interface{}{
 			"issue": map[string]interface{}{
@@ -125,8 +126,7 @@ func TestIssueHandler_HandleIssue_Success(t *testing.T) {
 
 	c.Request.Header.Set("Content-Type", "application/json")
 	bodyBytes, _ := json.Marshal(reqBody)
-	c.Request.Body = http.NoBody
-	c.Request.Body = http.MaxBytesReader(w, httptest.NewRequest("POST", "/issue", nil).Body, 1048576)
+	c.Request.Body = http.MaxBytesReader(w, httptest.NewRequest("POST", "/issue", bytes.NewReader(bodyBytes)).Body, 1048576)
 
 	handler.HandleIssue(c)
 
@@ -155,4 +155,3 @@ func TestIssueHandler_HandleIssue_InvalidRequest(t *testing.T) {
 
 	assert.Equal(t, http.StatusBadRequest, w.Code)
 }
-

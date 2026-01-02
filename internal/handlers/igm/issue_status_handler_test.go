@@ -1,7 +1,7 @@
 package igm
 
 import (
-	"context"
+	"bytes"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -42,13 +42,13 @@ func TestIssueStatusHandler_HandleIssueStatus_Success(t *testing.T) {
 
 	reqBody := map[string]interface{}{
 		"context": map[string]interface{}{
-			"domain":      "nic2004:60232",
-			"action":      "issue_status",
-			"bap_id":      "buyer-1",
-			"bap_uri":     "https://buyer.example.com",
+			"domain":         "nic2004:60232",
+			"action":         "issue_status",
+			"bap_id":         "buyer-1",
+			"bap_uri":        "https://buyer.example.com",
 			"transaction_id": "txn-123",
-			"message_id":  "msg-456",
-			"timestamp":   time.Now().Format(time.RFC3339),
+			"message_id":     "msg-456",
+			"timestamp":      time.Now().Format(time.RFC3339),
 		},
 		"message": map[string]interface{}{
 			"issue_id": "issue-123",
@@ -68,8 +68,7 @@ func TestIssueStatusHandler_HandleIssueStatus_Success(t *testing.T) {
 
 	c.Request.Header.Set("Content-Type", "application/json")
 	bodyBytes, _ := json.Marshal(reqBody)
-	c.Request.Body = http.NoBody
-	c.Request.Body = http.MaxBytesReader(w, httptest.NewRequest("POST", "/issue_status", nil).Body, 1048576)
+	c.Request.Body = http.MaxBytesReader(w, httptest.NewRequest("POST", "/issue_status", bytes.NewReader(bodyBytes)).Body, 1048576)
 
 	handler.HandleIssueStatus(c)
 
@@ -92,13 +91,13 @@ func TestIssueStatusHandler_HandleIssueStatus_IssueNotFound(t *testing.T) {
 
 	reqBody := map[string]interface{}{
 		"context": map[string]interface{}{
-			"domain":      "nic2004:60232",
-			"action":      "issue_status",
-			"bap_id":      "buyer-1",
-			"bap_uri":     "https://buyer.example.com",
+			"domain":         "nic2004:60232",
+			"action":         "issue_status",
+			"bap_id":         "buyer-1",
+			"bap_uri":        "https://buyer.example.com",
 			"transaction_id": "txn-123",
-			"message_id":  "msg-456",
-			"timestamp":   time.Now().Format(time.RFC3339),
+			"message_id":     "msg-456",
+			"timestamp":      time.Now().Format(time.RFC3339),
 		},
 		"message": map[string]interface{}{
 			"issue_id": "issue-999",
@@ -114,12 +113,10 @@ func TestIssueStatusHandler_HandleIssueStatus_IssueNotFound(t *testing.T) {
 
 	c.Request.Header.Set("Content-Type", "application/json")
 	bodyBytes, _ := json.Marshal(reqBody)
-	c.Request.Body = http.NoBody
-	c.Request.Body = http.MaxBytesReader(w, httptest.NewRequest("POST", "/issue_status", nil).Body, 1048576)
+	c.Request.Body = http.MaxBytesReader(w, httptest.NewRequest("POST", "/issue_status", bytes.NewReader(bodyBytes)).Body, 1048576)
 
 	handler.HandleIssueStatus(c)
 
 	assert.Equal(t, http.StatusNotFound, w.Code)
 	mockRepo.AssertExpectations(t)
 }
-
