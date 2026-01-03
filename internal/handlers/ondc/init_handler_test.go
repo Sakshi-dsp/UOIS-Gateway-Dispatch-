@@ -228,6 +228,9 @@ func TestInitHandler_Success(t *testing.T) {
 		return record.SearchID == searchID && record.QuoteID == quoteID && record.TransactionID == transactionID && record.FulfillmentID != ""
 	})).Return(nil)
 
+	// Mock fulfillment contacts storage (contacts retrieval is optional, may return nil)
+	fulfillmentContactsStorageService.On("GetFulfillmentContacts", mock.Anything, transactionID).Return(nil, nil)
+
 	// Mock successful callback
 	callbackService.On("SendCallback", mock.Anything, mock.MatchedBy(func(url string) bool {
 		return strings.HasSuffix(url, "/on_init")
@@ -305,6 +308,7 @@ func TestInitHandler_Success(t *testing.T) {
 	idempotencyService.AssertExpectations(t)
 	orderServiceClient.AssertExpectations(t)
 	orderRecordService.AssertExpectations(t)
+	fulfillmentContactsStorageService.AssertExpectations(t)
 }
 
 func TestInitHandler_InvalidSearchID(t *testing.T) {
