@@ -13,20 +13,19 @@ import (
 	"uois-gateway/internal/config"
 	"uois-gateway/pkg/errors"
 
-	"github.com/redis/go-redis/v9"
 	"go.uber.org/zap"
 )
 
 // Service sends HTTP callbacks to client callback URLs
 // ONDC requires all Seller NP callbacks to be HTTP-signed with digest and Authorization headers
 type Service struct {
-	httpClient  *http.Client
-	config      config.CallbackConfig
-	retryConfig config.RetryConfig
-	signer      Signer // ONDC-required: HTTP signature generator
+	httpClient   *http.Client
+	config       config.CallbackConfig
+	retryConfig  config.RetryConfig
+	signer       Signer // ONDC-required: HTTP signature generator
 	retryService *RetryService
-	logger      *zap.Logger
-	useRetry    bool
+	logger       *zap.Logger
+	useRetry     bool
 }
 
 // NewService creates a new callback service
@@ -48,7 +47,7 @@ func NewServiceWithRetry(
 	cfg config.CallbackConfig,
 	retryCfg config.RetryConfig,
 	signer Signer,
-	redis *redis.Client,
+	redis RedisClient,
 	auditService AuditService,
 	logger *zap.Logger,
 ) *Service {
@@ -56,17 +55,17 @@ func NewServiceWithRetry(
 		httpClient: &http.Client{
 			Timeout: time.Duration(cfg.HTTPTimeoutSeconds) * time.Second,
 		},
-		config:     cfg,
+		config:      cfg,
 		retryConfig: retryCfg,
-		signer:     signer,
-		logger:     logger,
-		useRetry:   true,
+		signer:      signer,
+		logger:      logger,
+		useRetry:    true,
 	}
-	
+
 	if redis != nil && auditService != nil {
 		baseService.retryService = NewRetryService(baseService, retryCfg, cfg, redis, auditService, logger)
 	}
-	
+
 	return baseService
 }
 
@@ -82,12 +81,12 @@ func (s *Service) SendCallback(ctx context.Context, callbackURL string, payload 
 	// Extract request ID from context if available, otherwise generate one
 	requestID := s.extractRequestID(ctx)
 	ttlSeconds := 30 // Default TTL for callbacks
-	
+
 	// Use retry service if enabled
 	if s.useRetry && s.retryService != nil {
 		return s.retryService.SendCallbackWithRetry(ctx, callbackURL, payload, requestID, ttlSeconds)
 	}
-	
+
 	// Fallback to direct call without retry
 	return s.sendCallbackDirect(ctx, callbackURL, payload)
 }

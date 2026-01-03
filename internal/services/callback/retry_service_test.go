@@ -26,6 +26,21 @@ func (m *MockAuditService) LogCallbackDelivery(ctx context.Context, req *audit.C
 	return args.Error(0)
 }
 
+// MockRedisClient is a mock implementation of RedisClient
+type MockRedisClient struct {
+	mock.Mock
+}
+
+func (m *MockRedisClient) XAdd(ctx context.Context, a *redis.XAddArgs) *redis.StringCmd {
+	args := m.Called(ctx, a)
+	return args.Get(0).(*redis.StringCmd)
+}
+
+func (m *MockRedisClient) XInfoStream(ctx context.Context, stream string) *redis.XInfoStreamCmd {
+	args := m.Called(ctx, stream)
+	return args.Get(0).(*redis.XInfoStreamCmd)
+}
+
 func TestRetryService_SendCallbackWithRetry_SuccessOnFirstAttempt(t *testing.T) {
 	logger := zap.NewNop()
 	cfg := config.CallbackConfig{
@@ -51,14 +66,8 @@ func TestRetryService_SendCallbackWithRetry_SuccessOnFirstAttempt(t *testing.T) 
 	mockAudit := new(MockAuditService)
 	mockAudit.On("LogCallbackDelivery", mock.Anything, mock.Anything).Return(nil)
 
-	redisClient := redis.NewClient(&redis.Options{
-		Addr: "localhost:6379",
-		DB:   1,
-	})
-	defer redisClient.Close()
-
-	retryService := NewRetryService(callbackService, retryConfig, cfg, redisClient, mockAudit, logger)
-	callbackServiceWithRetry := NewServiceWithRetry(cfg, retryConfig, mockSigner, redisClient, mockAudit, logger)
+	retryService := NewRetryService(callbackService, retryConfig, cfg, nil, mockAudit, logger)
+	callbackServiceWithRetry := NewServiceWithRetry(cfg, retryConfig, mockSigner, nil, mockAudit, logger)
 	callbackServiceWithRetry.retryService = retryService
 
 	payload := map[string]interface{}{"test": "data"}
@@ -100,13 +109,7 @@ func TestRetryService_SendCallbackWithRetry_SuccessOnRetry(t *testing.T) {
 	mockAudit := new(MockAuditService)
 	mockAudit.On("LogCallbackDelivery", mock.Anything, mock.Anything).Return(nil).Times(2)
 
-	redisClient := redis.NewClient(&redis.Options{
-		Addr: "localhost:6379",
-		DB:   1,
-	})
-	defer redisClient.Close()
-
-	retryService := NewRetryService(callbackService, retryConfig, cfg, redisClient, mockAudit, logger)
+	retryService := NewRetryService(callbackService, retryConfig, cfg, nil, mockAudit, logger)
 
 	payload := map[string]interface{}{"test": "data"}
 	err := retryService.SendCallbackWithRetry(context.Background(), server.URL, payload, "req-123", 30)
@@ -141,13 +144,7 @@ func TestRetryService_SendCallbackWithRetry_AllRetriesFail(t *testing.T) {
 	mockAudit := new(MockAuditService)
 	mockAudit.On("LogCallbackDelivery", mock.Anything, mock.Anything).Return(nil).Times(3)
 
-	redisClient := redis.NewClient(&redis.Options{
-		Addr: "localhost:6379",
-		DB:   1,
-	})
-	defer redisClient.Close()
-
-	retryService := NewRetryService(callbackService, retryConfig, cfg, redisClient, mockAudit, logger)
+	retryService := NewRetryService(callbackService, retryConfig, cfg, nil, mockAudit, logger)
 
 	payload := map[string]interface{}{"test": "data"}
 	err := retryService.SendCallbackWithRetry(context.Background(), server.URL, payload, "req-123", 30)
@@ -203,30 +200,21 @@ func TestRetryService_SendToDLQ(t *testing.T) {
 		CallbackBackoff:    []int{1, 2, 4},
 	}
 
-	redisClient := redis.NewClient(&redis.Options{
-		Addr: "localhost:6379",
-		DB:   1,
-	})
-	defer redisClient.Close()
+	mockRedis := new(MockRedisClient)
+	ctx := context.Background()
 
-	retryService := NewRetryService(nil, retryConfig, cfg, redisClient, nil, logger)
+	// Mock XAdd operation
+	stringCmd := redis.NewStringCmd(ctx)
+	stringCmd.SetVal("1234567890-0")
+	mockRedis.On("XAdd", ctx, mock.AnythingOfType("*redis.XAddArgs")).Return(stringCmd).Once()
+
+	retryService := NewRetryService(nil, retryConfig, cfg, mockRedis, nil, logger)
 
 	payload := map[string]interface{}{"test": "data"}
-	err := retryService.sendToDLQ(context.Background(), "http://example.com/callback", payload, "req-123", assert.AnError)
+	err := retryService.sendToDLQ(ctx, "http://example.com/callback", payload, "req-123", assert.AnError)
 
-	// This will fail if Redis is not available, but that's OK for unit tests
-	// In integration tests, we'd use a test Redis instance
-	if err != nil {
-		t.Logf("DLQ test skipped (Redis not available): %v", err)
-		return
-	}
-
-	// Verify DLQ entry was created
-	ctx := context.Background()
-	streamInfo, err := redisClient.XInfoStream(ctx, cfg.DLQStream).Result()
-	if err == nil {
-		assert.Greater(t, streamInfo.Length, int64(0))
-	}
+	assert.NoError(t, err)
+	mockRedis.AssertExpectations(t)
 }
 
 func TestRetryService_SendCallbackWithRetry_WithDLQ(t *testing.T) {
@@ -255,29 +243,23 @@ func TestRetryService_SendCallbackWithRetry_WithDLQ(t *testing.T) {
 	mockAudit := new(MockAuditService)
 	mockAudit.On("LogCallbackDelivery", mock.Anything, mock.Anything).Return(nil).Times(2)
 
-	redisClient := redis.NewClient(&redis.Options{
-		Addr: "localhost:6379",
-		DB:   1,
-	})
-	defer redisClient.Close()
+	mockRedis := new(MockRedisClient)
+	ctx := context.Background()
 
-	retryService := NewRetryService(callbackService, retryConfig, cfg, redisClient, mockAudit, logger)
+	// Mock XAdd operation for DLQ
+	stringCmd := redis.NewStringCmd(ctx)
+	stringCmd.SetVal("1234567890-0")
+	mockRedis.On("XAdd", ctx, mock.AnythingOfType("*redis.XAddArgs")).Return(stringCmd).Once()
+
+	retryService := NewRetryService(callbackService, retryConfig, cfg, mockRedis, mockAudit, logger)
 
 	payload := map[string]interface{}{"test": "data"}
-	err := retryService.SendCallbackWithRetry(context.Background(), server.URL, payload, "req-123", 30)
+	err := retryService.SendCallbackWithRetry(ctx, server.URL, payload, "req-123", 30)
 
 	assert.Error(t, err)
-
-	// Verify DLQ entry was created (if Redis is available)
-	ctx := context.Background()
-	_, dlqErr := redisClient.XInfoStream(ctx, cfg.DLQStream).Result()
-	if dlqErr == nil {
-		// DLQ entry should exist
-		t.Log("DLQ entry created successfully")
-	}
-
 	mockSigner.AssertExpectations(t)
 	mockAudit.AssertExpectations(t)
+	mockRedis.AssertExpectations(t)
 }
 
 func TestRetryService_SendCallbackWithRetry_ContextCancellation(t *testing.T) {
@@ -305,13 +287,7 @@ func TestRetryService_SendCallbackWithRetry_ContextCancellation(t *testing.T) {
 	mockAudit := new(MockAuditService)
 	mockAudit.On("LogCallbackDelivery", mock.Anything, mock.Anything).Return(nil).Once()
 
-	redisClient := redis.NewClient(&redis.Options{
-		Addr: "localhost:6379",
-		DB:   1,
-	})
-	defer redisClient.Close()
-
-	retryService := NewRetryService(callbackService, retryConfig, cfg, redisClient, mockAudit, logger)
+	retryService := NewRetryService(callbackService, retryConfig, cfg, nil, mockAudit, logger)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel() // Cancel immediately

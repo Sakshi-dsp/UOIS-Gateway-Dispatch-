@@ -10,15 +10,23 @@ import (
 	"go.uber.org/zap"
 )
 
+// RedisClient interface for Redis operations
+type RedisClient interface {
+	Get(ctx context.Context, key string) *redis.StringCmd
+	Set(ctx context.Context, key string, value interface{}, expiration time.Duration) *redis.StatusCmd
+	Del(ctx context.Context, keys ...string) *redis.IntCmd
+	Exists(ctx context.Context, keys ...string) *redis.IntCmd
+}
+
 // Service provides caching functionality using Redis
 type Service struct {
-	redis  *redis.Client
+	redis  RedisClient
 	logger *zap.Logger
 	ttl    time.Duration
 }
 
 // NewService creates a new cache service
-func NewService(redis *redis.Client, ttl time.Duration, logger *zap.Logger) *Service {
+func NewService(redis RedisClient, ttl time.Duration, logger *zap.Logger) *Service {
 	return &Service{
 		redis:  redis,
 		logger: logger,
@@ -79,4 +87,3 @@ func BuildKey(prefix string, parts ...string) string {
 	}
 	return key
 }
-

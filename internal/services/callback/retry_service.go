@@ -19,14 +19,10 @@ type CallbackSender interface {
 	SendCallbackDirect(ctx context.Context, callbackURL string, payload interface{}) error
 }
 
-// RetryService handles callback retries with exponential backoff and DLQ
-type RetryService struct {
-	callbackSender CallbackSender
-	config         config.RetryConfig
-	callbackConfig config.CallbackConfig
-	redis          *redis.Client
-	auditService   AuditService
-	logger         *zap.Logger
+// RedisClient interface for Redis stream operations
+type RedisClient interface {
+	XAdd(ctx context.Context, a *redis.XAddArgs) *redis.StringCmd
+	XInfoStream(ctx context.Context, stream string) *redis.XInfoStreamCmd
 }
 
 // AuditService interface for logging callback delivery attempts
@@ -34,12 +30,22 @@ type AuditService interface {
 	LogCallbackDelivery(ctx context.Context, req *audit.CallbackDeliveryLogParams) error
 }
 
+// RetryService handles callback retries with exponential backoff and DLQ
+type RetryService struct {
+	callbackSender CallbackSender
+	config         config.RetryConfig
+	callbackConfig config.CallbackConfig
+	redis          RedisClient
+	auditService   AuditService
+	logger         *zap.Logger
+}
+
 // NewRetryService creates a new retry service wrapper around callback sender
 func NewRetryService(
 	callbackSender CallbackSender,
 	retryConfig config.RetryConfig,
 	callbackConfig config.CallbackConfig,
-	redis *redis.Client,
+	redis RedisClient,
 	auditService AuditService,
 	logger *zap.Logger,
 ) *RetryService {
@@ -126,7 +132,7 @@ func (r *RetryService) SendCallbackWithRetry(
 	}
 
 	// All retries exhausted, send to DLQ if enabled
-	if r.callbackConfig.DLQEnabled && r.callbackConfig.DLQStream != "" {
+	if r.callbackConfig.DLQEnabled && r.callbackConfig.DLQStream != "" && r.redis != nil {
 		if err := r.sendToDLQ(ctx, callbackURL, payload, requestID, lastErr); err != nil {
 			r.logger.Error("failed to send callback to DLQ",
 				zap.String("request_id", requestID),

@@ -5,7 +5,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/redis/go-redis/v9"
 	"github.com/stretchr/testify/assert"
 	"go.uber.org/zap"
 )
@@ -22,64 +21,74 @@ func TestNewClient_Success(t *testing.T) {
 }
 
 func TestClient_Close(t *testing.T) {
-	// Mock test - actual implementation would require Redis
+	// Skip test if Redis is not available
 	logger := zap.NewNop()
-
-	// Create a mock Redis client for testing structure
-	// In real scenario, use testcontainers or mock
-	client := &Client{
-		rdb:    redis.NewClient(&redis.Options{Addr: "localhost:6379"}),
-		logger: logger,
+	testClient, err := NewClient("localhost:6379", "", 0, logger)
+	if err != nil {
+		t.Skip("Redis not available, skipping integration test")
+		return
 	}
+	defer testClient.Close()
 
-	err := client.Close()
-	// Will fail if Redis not running, but tests structure
-	_ = err
+	err = testClient.Close()
+	assert.NoError(t, err)
 }
 
 func TestClient_GetClient(t *testing.T) {
+	// Skip test if Redis is not available
 	logger := zap.NewNop()
-	client := &Client{
-		rdb:    redis.NewClient(&redis.Options{Addr: "localhost:6379"}),
-		logger: logger,
+	testClient, err := NewClient("localhost:6379", "", 0, logger)
+	if err != nil {
+		t.Skip("Redis not available, skipping integration test")
+		return
 	}
+	defer testClient.Close()
 
-	rdb := client.GetClient()
+	rdb := testClient.GetClient()
 	assert.NotNil(t, rdb)
 }
 
 func TestClient_Incr(t *testing.T) {
+	// Skip test if Redis is not available
 	logger := zap.NewNop()
-	client := &Client{
-		rdb:    redis.NewClient(&redis.Options{Addr: "localhost:6379"}),
-		logger: logger,
+	testClient, err := NewClient("localhost:6379", "", 0, logger)
+	if err != nil {
+		t.Skip("Redis not available, skipping integration test")
+		return
 	}
+	defer testClient.Close()
 
 	ctx := context.Background()
-	cmd := client.Incr(ctx, "test-key")
+	cmd := testClient.Incr(ctx, "test-key")
 	assert.NotNil(t, cmd)
 }
 
 func TestClient_Expire(t *testing.T) {
+	// Skip test if Redis is not available
 	logger := zap.NewNop()
-	client := &Client{
-		rdb:    redis.NewClient(&redis.Options{Addr: "localhost:6379"}),
-		logger: logger,
+	testClient, err := NewClient("localhost:6379", "", 0, logger)
+	if err != nil {
+		t.Skip("Redis not available, skipping integration test")
+		return
 	}
+	defer testClient.Close()
 
 	ctx := context.Background()
-	cmd := client.Expire(ctx, "test-key", time.Second)
+	cmd := testClient.Expire(ctx, "test-key", time.Second)
 	assert.NotNil(t, cmd)
 }
 
 func TestClient_TTL(t *testing.T) {
+	// Skip test if Redis is not available
 	logger := zap.NewNop()
-	client := &Client{
-		rdb:    redis.NewClient(&redis.Options{Addr: "localhost:6379"}),
-		logger: logger,
+	testClient, err := NewClient("localhost:6379", "", 0, logger)
+	if err != nil {
+		t.Skip("Redis not available, skipping integration test")
+		return
 	}
+	defer testClient.Close()
 
 	ctx := context.Background()
-	cmd := client.TTL(ctx, "test-key")
+	cmd := testClient.TTL(ctx, "test-key")
 	assert.NotNil(t, cmd)
 }
