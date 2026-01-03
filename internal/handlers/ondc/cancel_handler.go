@@ -19,14 +19,15 @@ import (
 
 // CancelHandler handles /cancel ONDC requests
 type CancelHandler struct {
-	callbackService    CallbackService
-	idempotencyService IdempotencyService
-	orderServiceClient OrderServiceClient
-	orderRecordService OrderRecordService
-	auditService       AuditService
-	bppID              string // BPP ID (ONDC-registered Seller NP identity)
-	bppURI             string // BPP URI
-	logger             *zap.Logger
+	callbackService      CallbackService
+	idempotencyService    IdempotencyService
+	orderServiceClient   OrderServiceClient
+	orderRecordService    OrderRecordService
+	billingStorageService BillingStorageService
+	auditService          AuditService
+	bppID                 string // BPP ID (ONDC-registered Seller NP identity)
+	bppURI                string // BPP URI
+	logger                *zap.Logger
 }
 
 // NewCancelHandler creates a new cancel handler
@@ -35,20 +36,22 @@ func NewCancelHandler(
 	idempotencyService IdempotencyService,
 	orderServiceClient OrderServiceClient,
 	orderRecordService OrderRecordService,
+	billingStorageService BillingStorageService,
 	auditService AuditService,
 	bppID string,
 	bppURI string,
 	logger *zap.Logger,
 ) *CancelHandler {
 	return &CancelHandler{
-		callbackService:    callbackService,
-		idempotencyService: idempotencyService,
-		orderServiceClient: orderServiceClient,
-		orderRecordService: orderRecordService,
-		auditService:       auditService,
-		bppID:              bppID,
-		bppURI:             bppURI,
-		logger:             logger,
+		callbackService:       callbackService,
+		idempotencyService:     idempotencyService,
+		orderServiceClient:     orderServiceClient,
+		orderRecordService:     orderRecordService,
+		billingStorageService:  billingStorageService,
+		auditService:           auditService,
+		bppID:                  bppID,
+		bppURI:                 bppURI,
+		logger:                 logger,
 	}
 }
 
@@ -169,7 +172,7 @@ func (h *CancelHandler) composeCancelResponse(req *models.ONDCRequest) models.ON
 
 func (h *CancelHandler) sendCancelCallback(ctx context.Context, req *models.ONDCRequest, orderRecord *OrderRecord, traceID string) {
 	callbackURL := req.Context.BapURI + "/on_cancel"
-	callbackPayload := h.buildOnCancelCallback(req, orderRecord)
+	callbackPayload := h.buildOnCancelCallback(ctx, req, orderRecord)
 
 	if err := h.callbackService.SendCallback(ctx, callbackURL, callbackPayload); err != nil {
 		h.logger.Error("failed to send /on_cancel callback", zap.Error(err), zap.String("trace_id", traceID), zap.String("callback_url", callbackURL))
@@ -179,7 +182,7 @@ func (h *CancelHandler) sendCancelCallback(ctx context.Context, req *models.ONDC
 	}
 }
 
-func (h *CancelHandler) buildOnCancelCallback(req *models.ONDCRequest, orderRecord *OrderRecord) models.ONDCResponse {
+func (h *CancelHandler) buildOnCancelCallback(ctx context.Context, req *models.ONDCRequest, orderRecord *OrderRecord) models.ONDCResponse {
 	callbackCtx := req.Context
 	callbackCtx.MessageID = uuid.New().String()
 	callbackCtx.Timestamp = time.Now().UTC()
@@ -217,18 +220,53 @@ func (h *CancelHandler) buildOnCancelCallback(req *models.ONDCRequest, orderReco
 		},
 	}
 
+	// Retrieve billing: first from request, then from Redis (stored during /init)
+	billing := h.getBilling(ctx, req)
+
+	orderMap := map[string]interface{}{
+		"id":           orderID,
+		"state":        "CANCELLED", // Order-level cancellation state
+		"fulfillments": []map[string]interface{}{fulfillment},
+	}
+
+	// Add billing if available (ONDC requirement)
+	if billing != nil {
+		orderMap["billing"] = billing
+	}
+
 	message := map[string]interface{}{
-		"order": map[string]interface{}{
-			"id":           orderID,
-			"state":        "CANCELLED", // Order-level cancellation state
-			"fulfillments": []map[string]interface{}{fulfillment},
-		},
+		"order": orderMap,
 	}
 
 	return models.ONDCResponse{
 		Context: callbackCtx,
 		Message: message,
 	}
+}
+
+// getBilling retrieves billing information: first from request, then from Redis
+func (h *CancelHandler) getBilling(ctx context.Context, req *models.ONDCRequest) map[string]interface{} {
+	// First: Check if billing exists in the current request
+	order, ok := req.Message["order"].(map[string]interface{})
+	if ok {
+		if billing, ok := order["billing"].(map[string]interface{}); ok && billing != nil {
+			return billing
+		}
+	}
+
+	// Second: Retrieve from Redis using transaction_id (if stored during /init)
+	if h.billingStorageService != nil {
+		billing, err := h.billingStorageService.GetBilling(ctx, req.Context.TransactionID)
+		if err == nil && billing != nil {
+			return billing
+		}
+		// Non-fatal: log but don't fail if billing retrieval fails
+		if err != nil {
+			h.logger.Debug("failed to retrieve billing from storage", zap.Error(err), zap.String("transaction_id", req.Context.TransactionID))
+		}
+	}
+
+	return nil
 }
 
 func (h *CancelHandler) buildIdempotencyKey(transactionID, messageID string) string {

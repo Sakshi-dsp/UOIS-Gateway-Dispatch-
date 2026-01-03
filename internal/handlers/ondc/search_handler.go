@@ -100,6 +100,15 @@ func (h *SearchHandler) HandleSearch(c *gin.Context) {
 		return
 	}
 
+	// Validate delivery category (Dispatch only supports Immediate Delivery or Standard Delivery with immediate subcategory)
+	categoryID := utils.ExtractCategoryID(intent)
+	timeDuration := utils.ExtractTimeDuration(intent)
+	if err := utils.ValidateDeliveryCategory(categoryID, timeDuration); err != nil {
+		h.logger.Warn("delivery category validation failed", zap.Error(err), zap.String("trace_id", traceID), zap.String("category_id", categoryID), zap.String("time_duration", timeDuration))
+		h.respondNACK(c, err)
+		return
+	}
+
 	// Check idempotency
 	idempotencyKey := h.buildIdempotencyKey(req.Context.TransactionID, req.Context.MessageID)
 	if existingResponseBytes, exists, err := h.idempotencyService.CheckIdempotency(ctx, idempotencyKey); err == nil && exists {

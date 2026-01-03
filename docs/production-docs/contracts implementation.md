@@ -259,6 +259,197 @@ func (h *SearchHandler) HandleSearch(c *gin.Context) {
 2. ❌ `payment.type: "INVALID_TYPE"` - Should reject with error 65001
 3. ❌ `payment.type: null` - Should reject with error 65001
 
+### Delivery Category Validation
+
+**ONDC Requirement**: LSPs may validate delivery categories and reject unsupported ones. ONDC contract defines validations for different categories (lines 549-552).
+
+**UOIS Gateway Implementation**:
+- **Location**: `internal/utils/delivery_category_validation.go`
+- **Validation Function**: `ValidateDeliveryCategory(categoryID string, timeDuration string) *errors.DomainError`
+- **Supported Categories**:
+  - ✅ `"Immediate Delivery"` - Requires `time.duration <= PT60M` if duration is provided
+  - ✅ `"Standard Delivery"` - Only accepted with immediate subcategory (`time.duration <= PT60M`)
+- **Rejected Categories**:
+  - ❌ `"Same Day Delivery"` - Rejected with error code 66002
+  - ❌ `"Next Day Delivery"` - Rejected with error code 66002
+  - ❌ `"Express Delivery"` - Rejected with error code 66002
+  - ❌ `"Standard Delivery"` without duration or with duration > PT60M - Rejected with error code 66002
+
+**Implementation Details**:
+
+#### `/search` Handler
+- **Location**: `internal/handlers/ondc/search_handler.go` (lines 103-110)
+- **Validation Point**: After payment type validation, before publishing SEARCH_REQUESTED event
+- **Data Source**: `intent.category.id` and `intent.provider.time.duration`
+- **Helper Functions**: `utils.ExtractCategoryID(intent)` and `utils.ExtractTimeDuration(intent)`
+
+```go
+// Validate delivery category (Dispatch only supports Immediate Delivery or Standard Delivery with immediate subcategory)
+categoryID := utils.ExtractCategoryID(intent)
+timeDuration := utils.ExtractTimeDuration(intent)
+if err := utils.ValidateDeliveryCategory(categoryID, timeDuration); err != nil {
+    h.logger.Warn("delivery category validation failed", zap.Error(err), zap.String("trace_id", traceID), zap.String("category_id", categoryID), zap.String("time_duration", timeDuration))
+    h.respondNACK(c, err)
+    return
+}
+```
+
+#### `/init` Handler
+- **Location**: `internal/handlers/ondc/init_handler.go` (lines 100-107)
+- **Validation Point**: After payment type validation, before publishing INIT_REQUESTED event
+- **Data Source**: `order.items[0].category_id` and `order.items[0].time.duration`
+- **Helper Functions**: `utils.ExtractCategoryIDFromOrder(order)` and `utils.ExtractTimeDurationFromOrder(order)`
+
+```go
+// Validate delivery category (Dispatch only supports Immediate Delivery or Standard Delivery with immediate subcategory)
+categoryID := utils.ExtractCategoryIDFromOrder(order)
+timeDuration := utils.ExtractTimeDurationFromOrder(order)
+if err := utils.ValidateDeliveryCategory(categoryID, timeDuration); err != nil {
+    h.logger.Warn("delivery category validation failed", zap.Error(err), zap.String("trace_id", traceID), zap.String("category_id", categoryID), zap.String("time_duration", timeDuration))
+    h.respondNACK(c, err)
+    return
+}
+```
+
+**Duration Validation**:
+- Parses ISO8601 duration format (PT30M, PT60M, PT1H30M, etc.)
+- Converts to total minutes (hours*60 + minutes, rounding up seconds)
+- Validates that duration <= 60 minutes for supported categories
+- Returns error if duration exceeds limit or format is invalid
+
+**Error Responses**:
+- **Error Code**: `66002` (order validation failure)
+- **Error Type**: `CONTEXT_ERROR`
+- **Error Messages**:
+  - For unsupported categories: `"Order Validation Failed: unsupported delivery category '<category>'. Only 'Immediate Delivery' or 'Standard Delivery' with immediate subcategory (time.duration <= PT60M) is supported"`
+  - For Standard Delivery without immediate subcategory: `"Order Validation Failed: unsupported delivery category 'Standard Delivery'. Standard Delivery is only accepted with immediate subcategory (time.duration <= PT60M)"`
+  - For Immediate Delivery with invalid duration: `"Order Validation Failed: 'Immediate Delivery' requires time.duration <= PT60M, got <duration>"`
+
+**ONDC Compliance**:
+- ✅ Validates delivery categories per ONDC contract (lines 549-552)
+- ✅ Returns appropriate error codes (66002) for validation failures
+- ✅ Provides clear error messages indicating supported categories
+- ✅ Validates duration constraints for supported categories
+
+**Dependency**: None - validation is self-contained in utils package. No external service calls required.
+
+### Billing Information Storage
+
+**ONDC Requirement**: Billing information is provided by Buyer NP in `/init` request (`message.order.billing`) and must be preserved for use in `/on_confirm` and other post-order APIs. ONDC contract specifies that billing should be the same as in `/init` (footnote [^118]).
+
+**UOIS Gateway Implementation**:
+- **Location**: `internal/services/ondc/storage/billing_storage_service.go`
+- **Service Interface**: `BillingStorageService`
+- **Storage Backend**: Redis (via `CacheService`)
+- **Redis Key Pattern**: `ondc_billing:{transaction_id}`
+- **TTL**: 24 hours
+
+**Implementation Details**:
+
+#### Billing Storage Service
+- **Location**: `internal/services/ondc/storage/billing_storage_service.go`
+- **Interface Methods**:
+  - `StoreBilling(ctx context.Context, transactionID string, billing map[string]interface{}) error`
+  - `GetBilling(ctx context.Context, transactionID string) (map[string]interface{}, error)`
+  - `DeleteBilling(ctx context.Context, transactionID string) error`
+
+**Service Implementation**:
+```go
+type Service struct {
+    cache  CacheService
+    logger *zap.Logger
+    ttl    time.Duration // 24 hours
+}
+
+func (s *Service) StoreBilling(ctx context.Context, transactionID string, billing map[string]interface{}) error {
+    key := fmt.Sprintf("ondc_billing:%s", transactionID)
+    return s.cache.Set(ctx, key, billing) // TTL set at service creation
+}
+```
+
+#### `/init` Handler Integration
+- **Location**: `internal/handlers/ondc/init_handler.go` (lines 169-177)
+- **Integration Point**: After payment type validation, before extracting coordinates
+- **Data Source**: `message.order.billing` from `/init` request
+- **Storage Key**: Uses `transaction_id` from request context
+
+```go
+// Extract billing information and store in Redis
+if h.billingStorageService != nil {
+    billing := h.extractBilling(&req)
+    if billing != nil {
+        if err := h.billingStorageService.StoreBilling(ctx, req.Context.TransactionID, billing); err != nil {
+            h.logger.Warn("failed to store billing", zap.Error(err), zap.String("trace_id", traceID), zap.String("transaction_id", req.Context.TransactionID))
+            // Non-fatal error - continue processing even if billing storage fails
+        }
+    }
+}
+```
+
+**Billing Extraction**:
+- **Location**: `internal/handlers/ondc/init_handler.go` (method `extractBilling`)
+- **Extraction Logic**: Extracts `order.billing` from request message
+- **Optional Field**: Billing is optional per ONDC spec - returns `nil` if not present
+
+```go
+func (h *InitHandler) extractBilling(req *models.ONDCRequest) map[string]interface{} {
+    order, ok := req.Message["order"].(map[string]interface{})
+    if !ok {
+        return nil
+    }
+    billing, ok := order["billing"].(map[string]interface{})
+    if !ok {
+        return nil // Billing is optional per ONDC spec
+    }
+    return billing
+}
+```
+
+**Billing Structure** (per ONDC spec):
+```json
+{
+  "name": "ONDC Logistics Buyer NP",
+  "address": {
+    "name": "My house or building no",
+    "building": "My house or building name",
+    "locality": "Jayanagar",
+    "city": "Bengaluru",
+    "state": "Karnataka",
+    "country": "India",
+    "area_code": "560076"
+  },
+  "tax_number": "XXXXXXXXXXXXXXX",  // Required - GST no for logistics buyer NP
+  "phone": "9886098860",
+  "email": "abcd.efgh@gmail.com",   // Required
+  "created_at": "2023-02-06T21:30:00.000Z",
+  "updated_at": "2023-02-06T21:30:00.000Z"
+}
+```
+
+**ONDC Compliance**:
+- ✅ Billing extracted from `/init` request (`message.order.billing`)
+- ✅ Stored with transaction_id as key for correlation
+- ✅ TTL of 24 hours matches typical order lifecycle
+- ✅ Non-fatal storage - order processing continues even if billing storage fails
+- ✅ Billing can be retrieved for use in `/on_confirm` and other post-order APIs
+
+**Usage in Post-Order APIs**:
+- Billing information stored during `/init` can be retrieved using `GetBilling(transactionID)` for use in:
+  - `/on_confirm` callback (billing should be same as in /init per ONDC spec)
+  - `/on_status` callback
+  - `/on_cancel` callback
+  - `/on_update` callback
+
+**Dependency**: 
+- Requires `CacheService` (Redis) to be configured and available
+- Billing storage is non-blocking - order processing continues even if storage fails
+- Storage failures are logged but do not cause request rejection
+
+**Error Handling**:
+- Storage failures are logged as warnings but do not block order processing
+- Missing billing (optional field) is handled gracefully
+- Invalid transaction_id returns error
+
 ## References
 
 - [ONDC Error Codes](https://github.com/ONDC-Official/developer-docs/blob/main/protocol-network-extension/error-codes.md)

@@ -20,17 +20,18 @@ import (
 
 // InitHandler handles /init ONDC requests
 type InitHandler struct {
-	eventPublisher     EventPublisher
-	eventConsumer      EventConsumer
-	callbackService    CallbackService
-	idempotencyService IdempotencyService
-	orderServiceClient OrderServiceClient
-	orderRecordService OrderRecordService
-	auditService       AuditService
-	providerID         string // Stable provider identifier (e.g., "P1")
-	bppID              string // BPP ID (ONDC-registered Seller NP identity)
-	bppURI             string // BPP URI
-	logger             *zap.Logger
+	eventPublisher        EventPublisher
+	eventConsumer         EventConsumer
+	callbackService       CallbackService
+	idempotencyService    IdempotencyService
+	orderServiceClient    OrderServiceClient
+	orderRecordService    OrderRecordService
+	billingStorageService BillingStorageService
+	auditService          AuditService
+	providerID            string // Stable provider identifier (e.g., "P1")
+	bppID                 string // BPP ID (ONDC-registered Seller NP identity)
+	bppURI                string // BPP URI
+	logger                *zap.Logger
 }
 
 // NewInitHandler creates a new init handler
@@ -41,6 +42,7 @@ func NewInitHandler(
 	idempotencyService IdempotencyService,
 	orderServiceClient OrderServiceClient,
 	orderRecordService OrderRecordService,
+	billingStorageService BillingStorageService,
 	auditService AuditService,
 	providerID string,
 	bppID string,
@@ -48,17 +50,18 @@ func NewInitHandler(
 	logger *zap.Logger,
 ) *InitHandler {
 	return &InitHandler{
-		eventPublisher:     eventPublisher,
-		eventConsumer:      eventConsumer,
-		callbackService:    callbackService,
-		idempotencyService: idempotencyService,
-		orderServiceClient: orderServiceClient,
-		orderRecordService: orderRecordService,
-		auditService:       auditService,
-		providerID:         providerID,
-		bppID:              bppID,
-		bppURI:             bppURI,
-		logger:             logger,
+		eventPublisher:        eventPublisher,
+		eventConsumer:         eventConsumer,
+		callbackService:       callbackService,
+		idempotencyService:    idempotencyService,
+		orderServiceClient:    orderServiceClient,
+		orderRecordService:    orderRecordService,
+		billingStorageService: billingStorageService,
+		auditService:          auditService,
+		providerID:            providerID,
+		bppID:                 bppID,
+		bppURI:                bppURI,
+		logger:                logger,
 	}
 }
 
@@ -93,6 +96,15 @@ func (h *InitHandler) HandleInit(c *gin.Context) {
 	paymentInfo, _ := order["payment"].(map[string]interface{})
 	if err := utils.ValidatePaymentType(paymentInfo); err != nil {
 		h.logger.Warn("payment type validation failed", zap.Error(err), zap.String("trace_id", traceID))
+		h.respondNACK(c, err)
+		return
+	}
+
+	// Validate delivery category (Dispatch only supports Immediate Delivery or Standard Delivery with immediate subcategory)
+	categoryID := utils.ExtractCategoryIDFromOrder(order)
+	timeDuration := utils.ExtractTimeDurationFromOrder(order)
+	if err := utils.ValidateDeliveryCategory(categoryID, timeDuration); err != nil {
+		h.logger.Warn("delivery category validation failed", zap.Error(err), zap.String("trace_id", traceID), zap.String("category_id", categoryID), zap.String("time_duration", timeDuration))
 		h.respondNACK(c, err)
 		return
 	}
@@ -155,6 +167,17 @@ func (h *InitHandler) HandleInit(c *gin.Context) {
 	if !valid {
 		h.respondNACK(c, errors.NewDomainError(65004, "quote expired", "search_id TTL expired"))
 		return
+	}
+
+	// Extract billing information and store in Redis
+	if h.billingStorageService != nil {
+		billing := h.extractBilling(&req)
+		if billing != nil {
+			if err := h.billingStorageService.StoreBilling(ctx, req.Context.TransactionID, billing); err != nil {
+				h.logger.Warn("failed to store billing", zap.Error(err), zap.String("trace_id", traceID), zap.String("transaction_id", req.Context.TransactionID))
+				// Non-fatal error - continue processing even if billing storage fails
+			}
+		}
 	}
 
 	// Extract coordinates and addresses
@@ -329,6 +352,20 @@ func (h *InitHandler) extractInitData(req *models.ONDCRequest) (float64, float64
 	}
 
 	return originLat, originLng, destLat, destLng, originAddr, destAddr, packageInfo, nil
+}
+
+func (h *InitHandler) extractBilling(req *models.ONDCRequest) map[string]interface{} {
+	order, ok := req.Message["order"].(map[string]interface{})
+	if !ok {
+		return nil
+	}
+
+	billing, ok := order["billing"].(map[string]interface{})
+	if !ok {
+		return nil // Billing is optional per ONDC spec
+	}
+
+	return billing
 }
 
 func (h *InitHandler) extractItemsFromRequest(req *models.ONDCRequest) []map[string]interface{} {

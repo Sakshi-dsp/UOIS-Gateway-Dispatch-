@@ -27,10 +27,11 @@ func TestStatusHandler_Success(t *testing.T) {
 	idempotencyService := new(mockIdempotencyService)
 	orderServiceClient := new(mockOrderServiceClient)
 	orderRecordService := new(mockOrderRecordService)
+	billingStorageService := new(mockBillingStorageService)
 	auditService := new(mockAuditService)
 	cacheService := new(mockCacheService)
 
-	handler := NewStatusHandler(callbackService, idempotencyService, orderServiceClient, orderRecordService, auditService, cacheService, "test-bpp-id", "https://bpp.example.com", logger)
+	handler := NewStatusHandler(callbackService, idempotencyService, orderServiceClient, orderRecordService, billingStorageService, auditService, cacheService, "test-bpp-id", "https://bpp.example.com", logger)
 
 	clientOrderID := uuid.New().String()
 	dispatchOrderID := uuid.New().String()
@@ -48,6 +49,9 @@ func TestStatusHandler_Success(t *testing.T) {
 	// Mock cache miss
 	cacheService.On("Get", mock.Anything, mock.AnythingOfType("string"), mock.Anything).Return(false, nil)
 	cacheService.On("Set", mock.Anything, mock.AnythingOfType("string"), mock.Anything).Return(nil).Maybe()
+
+	// Mock billing storage (billing retrieval is optional, may return nil)
+	billingStorageService.On("GetBilling", mock.Anything, mock.AnythingOfType("string")).Return(nil, nil).Maybe()
 
 	// Mock order record lookup by client_id + order.id (ONDC)
 	fulfillmentID := uuid.New().String()
@@ -128,10 +132,11 @@ func TestStatusHandler_OrderNotFound(t *testing.T) {
 	idempotencyService := new(mockIdempotencyService)
 	orderServiceClient := new(mockOrderServiceClient)
 	orderRecordService := new(mockOrderRecordService)
+	billingStorageService := new(mockBillingStorageService)
 	auditService := new(mockAuditService)
 	cacheService := new(mockCacheService)
 
-	handler := NewStatusHandler(callbackService, idempotencyService, orderServiceClient, orderRecordService, auditService, cacheService, "test-bpp-id", "https://bpp.example.com", logger)
+	handler := NewStatusHandler(callbackService, idempotencyService, orderServiceClient, orderRecordService, billingStorageService, auditService, cacheService, "test-bpp-id", "https://bpp.example.com", logger)
 
 	clientOrderID := uuid.New().String()
 	transactionID := uuid.New().String()

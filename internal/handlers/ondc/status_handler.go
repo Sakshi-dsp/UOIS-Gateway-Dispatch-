@@ -19,15 +19,16 @@ import (
 
 // StatusHandler handles /status ONDC requests
 type StatusHandler struct {
-	callbackService    CallbackService
-	idempotencyService IdempotencyService
-	orderServiceClient OrderServiceClient
-	orderRecordService OrderRecordService
-	auditService       AuditService
-	cacheService       CacheService
-	bppID              string // BPP ID (ONDC-registered Seller NP identity)
-	bppURI             string // BPP URI
-	logger             *zap.Logger
+	callbackService      CallbackService
+	idempotencyService    IdempotencyService
+	orderServiceClient    OrderServiceClient
+	orderRecordService    OrderRecordService
+	billingStorageService BillingStorageService
+	auditService          AuditService
+	cacheService          CacheService
+	bppID                 string // BPP ID (ONDC-registered Seller NP identity)
+	bppURI                string // BPP URI
+	logger                *zap.Logger
 }
 
 // NewStatusHandler creates a new status handler
@@ -36,6 +37,7 @@ func NewStatusHandler(
 	idempotencyService IdempotencyService,
 	orderServiceClient OrderServiceClient,
 	orderRecordService OrderRecordService,
+	billingStorageService BillingStorageService,
 	auditService AuditService,
 	cacheService CacheService,
 	bppID string,
@@ -43,15 +45,16 @@ func NewStatusHandler(
 	logger *zap.Logger,
 ) *StatusHandler {
 	return &StatusHandler{
-		callbackService:    callbackService,
-		idempotencyService: idempotencyService,
-		orderServiceClient: orderServiceClient,
-		orderRecordService: orderRecordService,
-		auditService:       auditService,
-		cacheService:       cacheService,
-		bppID:              bppID,
-		bppURI:             bppURI,
-		logger:             logger,
+		callbackService:       callbackService,
+		idempotencyService:     idempotencyService,
+		orderServiceClient:     orderServiceClient,
+		orderRecordService:     orderRecordService,
+		billingStorageService:  billingStorageService,
+		auditService:           auditService,
+		cacheService:           cacheService,
+		bppID:                  bppID,
+		bppURI:                 bppURI,
+		logger:                 logger,
 	}
 }
 
@@ -199,7 +202,7 @@ func (h *StatusHandler) composeStatusResponse(req *models.ONDCRequest, orderStat
 
 func (h *StatusHandler) sendStatusCallback(ctx context.Context, req *models.ONDCRequest, orderStatus *OrderStatus, orderRecord *OrderRecord, traceID string) {
 	callbackURL := req.Context.BapURI + "/on_status"
-	callbackPayload := h.buildOnStatusCallback(req, orderStatus, orderRecord)
+	callbackPayload := h.buildOnStatusCallback(ctx, req, orderStatus, orderRecord)
 
 	if err := h.callbackService.SendCallback(ctx, callbackURL, callbackPayload); err != nil {
 		h.logger.Error("failed to send /on_status callback", zap.Error(err), zap.String("trace_id", traceID), zap.String("callback_url", callbackURL))
@@ -209,7 +212,7 @@ func (h *StatusHandler) sendStatusCallback(ctx context.Context, req *models.ONDC
 	}
 }
 
-func (h *StatusHandler) buildOnStatusCallback(req *models.ONDCRequest, orderStatus *OrderStatus, orderRecord *OrderRecord) models.ONDCResponse {
+func (h *StatusHandler) buildOnStatusCallback(ctx context.Context, req *models.ONDCRequest, orderStatus *OrderStatus, orderRecord *OrderRecord) models.ONDCResponse {
 	// Regenerate callback context (ONDC protocol requirement)
 	callbackCtx := req.Context
 	callbackCtx.MessageID = uuid.New().String()
@@ -278,18 +281,53 @@ func (h *StatusHandler) buildOnStatusCallback(req *models.ONDCRequest, orderStat
 	// Note: POP/POD removed - ONDC uses documents/tags/images, not location.descriptor.name
 	// For certification, omit POP/POD or implement via domain-specific extensions
 
+	// Retrieve billing: first from request, then from Redis (stored during /init)
+	billing := h.getBilling(ctx, req)
+
+	orderMap := map[string]interface{}{
+		"id":           orderID,
+		"state":        ondcOrderState,
+		"fulfillments": []map[string]interface{}{fulfillment},
+	}
+
+	// Add billing if available (ONDC requirement)
+	if billing != nil {
+		orderMap["billing"] = billing
+	}
+
 	message := map[string]interface{}{
-		"order": map[string]interface{}{
-			"id":           orderID,
-			"state":        ondcOrderState,
-			"fulfillments": []map[string]interface{}{fulfillment},
-		},
+		"order": orderMap,
 	}
 
 	return models.ONDCResponse{
 		Context: callbackCtx,
 		Message: message,
 	}
+}
+
+// getBilling retrieves billing information: first from request, then from Redis
+func (h *StatusHandler) getBilling(ctx context.Context, req *models.ONDCRequest) map[string]interface{} {
+	// First: Check if billing exists in the current request
+	order, ok := req.Message["order"].(map[string]interface{})
+	if ok {
+		if billing, ok := order["billing"].(map[string]interface{}); ok && billing != nil {
+			return billing
+		}
+	}
+
+	// Second: Retrieve from Redis using transaction_id (if stored during /init)
+	if h.billingStorageService != nil {
+		billing, err := h.billingStorageService.GetBilling(ctx, req.Context.TransactionID)
+		if err == nil && billing != nil {
+			return billing
+		}
+		// Non-fatal: log but don't fail if billing retrieval fails
+		if err != nil {
+			h.logger.Debug("failed to retrieve billing from storage", zap.Error(err), zap.String("transaction_id", req.Context.TransactionID))
+		}
+	}
+
+	return nil
 }
 
 func (h *StatusHandler) buildIdempotencyKey(transactionID, messageID string) string {

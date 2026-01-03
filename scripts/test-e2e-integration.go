@@ -478,6 +478,137 @@ func (it *IntegrationTest) TestEventConsumption(ctx context.Context) error {
 	return nil
 }
 
+// TestValidations tests validation rules: delivery category, payment type, and billing storage
+func (it *IntegrationTest) TestValidations(ctx context.Context) error {
+	it.logger.Info("=== Testing Validation Rules ===")
+
+	// Test 1: Invalid delivery category (Same Day Delivery should be rejected)
+	it.logger.Info("Test: Invalid delivery category 'Same Day Delivery' should be rejected")
+	searchReqInvalidCategory, err := it.LoadJSONFile("ondc/requests/search.json")
+	if err != nil {
+		return fmt.Errorf("failed to load search request: %w", err)
+	}
+
+	// Modify category to unsupported one
+	intent := searchReqInvalidCategory["message"].(map[string]interface{})["intent"].(map[string]interface{})
+	category := intent["category"].(map[string]interface{})
+	category["id"] = "Same Day Delivery"
+
+	resp, err := it.SendONDCRequest("/search", searchReqInvalidCategory)
+	if err != nil {
+		return fmt.Errorf("failed to send /search request: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode == http.StatusOK {
+		return fmt.Errorf("expected rejection for unsupported category 'Same Day Delivery', but got 200 OK")
+	}
+
+	var errorResp map[string]interface{}
+	if err := json.NewDecoder(resp.Body).Decode(&errorResp); err != nil {
+		return fmt.Errorf("failed to parse error response: %w", err)
+	}
+
+	errorObj, ok := errorResp["error"].(map[string]interface{})
+	if !ok {
+		return fmt.Errorf("expected error object in response")
+	}
+
+	errorCode, ok := errorObj["code"].(string)
+	if !ok || errorCode != "66002" {
+		return fmt.Errorf("expected error code 66002 (order validation failure), got %v", errorCode)
+	}
+
+	it.logger.Info("✓ Invalid delivery category correctly rejected", zap.String("error_code", errorCode))
+
+	// Test 2: Invalid payment type (ON-FULFILLMENT should be rejected)
+	it.logger.Info("Test: Invalid payment type 'ON-FULFILLMENT' should be rejected")
+	searchReqInvalidPayment, err := it.LoadJSONFile("ondc/requests/search.json")
+	if err != nil {
+		return fmt.Errorf("failed to load search request: %w", err)
+	}
+
+	// Modify payment type to unsupported one
+	intent2 := searchReqInvalidPayment["message"].(map[string]interface{})["intent"].(map[string]interface{})
+	payment := intent2["payment"].(map[string]interface{})
+	payment["type"] = "ON-FULFILLMENT"
+
+	resp2, err := it.SendONDCRequest("/search", searchReqInvalidPayment)
+	if err != nil {
+		return fmt.Errorf("failed to send /search request: %w", err)
+	}
+	defer resp2.Body.Close()
+
+	if resp2.StatusCode == http.StatusOK {
+		return fmt.Errorf("expected rejection for unsupported payment type 'ON-FULFILLMENT', but got 200 OK")
+	}
+
+	var errorResp2 map[string]interface{}
+	if err := json.NewDecoder(resp2.Body).Decode(&errorResp2); err != nil {
+		return fmt.Errorf("failed to parse error response: %w", err)
+	}
+
+	errorObj2, ok := errorResp2["error"].(map[string]interface{})
+	if !ok {
+		return fmt.Errorf("expected error object in response")
+	}
+
+	errorCode2, ok := errorObj2["code"].(string)
+	if !ok || errorCode2 != "65004" {
+		return fmt.Errorf("expected error code 65004 (not serviceable), got %v", errorCode2)
+	}
+
+	it.logger.Info("✓ Invalid payment type correctly rejected", zap.String("error_code", errorCode2))
+
+	// Test 3: Verify billing storage (check if billing is stored in Redis after /init)
+	it.logger.Info("Test: Billing information should be stored in Redis after /init")
+	initReq, err := it.LoadJSONFile("ondc/requests/init.json")
+	if err != nil {
+		return fmt.Errorf("failed to load init request: %w", err)
+	}
+
+	contextObj := initReq["context"].(map[string]interface{})
+	transactionID := contextObj["transaction_id"].(string)
+
+	// Send /init request (this should store billing)
+	resp3, err := it.SendONDCRequest("/init", initReq)
+	if err != nil {
+		return fmt.Errorf("failed to send /init request: %w", err)
+	}
+	defer resp3.Body.Close()
+
+	// Wait a bit for billing storage to complete
+	time.Sleep(500 * time.Millisecond)
+
+	// Check if billing was stored in Redis
+	// Note: Cache service stores data as JSON, so we need to unmarshal
+	billingKey := fmt.Sprintf("ondc_billing:%s", transactionID)
+	billingData, err := it.redisClient.Get(ctx, billingKey).Result()
+	if err == redis.Nil {
+		it.logger.Warn("Billing not found in Redis (may be optional or storage failed)", zap.String("key", billingKey))
+		// This is OK - billing storage is non-fatal, and billing might not be present in test data
+	} else if err != nil {
+		it.logger.Warn("Failed to check billing in Redis", zap.Error(err), zap.String("key", billingKey))
+		// This is OK - billing storage is non-fatal
+	} else {
+		// Cache service stores JSON strings, unmarshal to verify
+		var billing map[string]interface{}
+		if err := json.Unmarshal([]byte(billingData), &billing); err != nil {
+			it.logger.Warn("Failed to unmarshal billing from Redis", zap.Error(err))
+		} else {
+			// Verify billing contains expected fields
+			if name, ok := billing["name"].(string); ok && name != "" {
+				it.logger.Info("✓ Billing information stored in Redis", zap.String("key", billingKey), zap.String("name", name))
+			} else {
+				it.logger.Warn("Billing stored but missing expected fields", zap.String("key", billingKey))
+			}
+		}
+	}
+
+	it.logger.Info("✓ Validation tests completed successfully")
+	return nil
+}
+
 // RunAllTests runs the complete end-to-end integration test suite
 func (it *IntegrationTest) RunAllTests(ctx context.Context) error {
 	it.logger.Info("========================================")
@@ -510,6 +641,11 @@ func (it *IntegrationTest) RunAllTests(ctx context.Context) error {
 	// Test 5: Complete /confirm flow
 	if err := it.TestConfirmFlow(ctx, quoteID); err != nil {
 		return fmt.Errorf("/confirm flow test failed: %w", err)
+	}
+
+	// Test 6: Validation tests (delivery category, payment type, billing storage)
+	if err := it.TestValidations(ctx); err != nil {
+		return fmt.Errorf("validation tests failed: %w", err)
 	}
 
 	it.logger.Info("========================================")

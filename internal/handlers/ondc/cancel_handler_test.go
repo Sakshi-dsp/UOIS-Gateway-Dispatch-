@@ -26,9 +26,10 @@ func TestCancelHandler_Success(t *testing.T) {
 	idempotencyService := new(mockIdempotencyService)
 	orderServiceClient := new(mockOrderServiceClient)
 	orderRecordService := new(mockOrderRecordService)
+	billingStorageService := new(mockBillingStorageService)
 	auditService := new(mockAuditService)
 
-	handler := NewCancelHandler(callbackService, idempotencyService, orderServiceClient, orderRecordService, auditService, "test-bpp-id", "https://bpp.example.com", logger)
+	handler := NewCancelHandler(callbackService, idempotencyService, orderServiceClient, orderRecordService, billingStorageService, auditService, "test-bpp-id", "https://bpp.example.com", logger)
 
 	clientOrderID := uuid.New().String()
 	dispatchOrderID := uuid.New().String()
@@ -37,6 +38,9 @@ func TestCancelHandler_Success(t *testing.T) {
 
 	idempotencyService.On("CheckIdempotency", mock.Anything, mock.AnythingOfType("string")).Return(nil, false, nil)
 	idempotencyService.On("StoreIdempotency", mock.Anything, mock.AnythingOfType("string"), mock.Anything, mock.AnythingOfType("time.Duration")).Return(nil)
+
+	// Mock billing storage (billing retrieval is optional, may return nil)
+	billingStorageService.On("GetBilling", mock.Anything, mock.AnythingOfType("string")).Return(nil, nil).Maybe()
 
 	fulfillmentID := uuid.New().String()
 	orderRecord := &OrderRecord{

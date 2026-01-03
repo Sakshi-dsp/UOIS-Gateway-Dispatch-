@@ -4,6 +4,29 @@
 
 1. **⚠️ Important:** **UOIS (Dispatch) does NOT accept COD (ON-FULFILLMENT) payment type.** Orders with `payment.type: "ON-FULFILLMENT"` will be rejected.
 
+2. **⚠️ Important:** **UOIS (Dispatch) only supports specific delivery categories:**
+   - ✅ `"Immediate Delivery"` - Supported (requires `time.duration <= PT60M` if duration is provided)
+   - ✅ `"Standard Delivery"` - Supported only with immediate subcategory (requires `time.duration <= PT60M`)
+   - ❌ `"Same Day Delivery"` - **NOT SUPPORTED** (will be rejected with error code 66002)
+   - ❌ `"Next Day Delivery"` - **NOT SUPPORTED** (will be rejected with error code 66002)
+   - ❌ `"Express Delivery"` - **NOT SUPPORTED** (will be rejected with error code 66002)
+   
+   **Validation Rules:**
+   - If Buyer NP sends unsupported delivery categories (e.g., "Same Day Delivery", "Next Day Delivery", "Express Delivery"), Seller NP responds with NACK: `"Order Validation Failed: unsupported delivery category '<category>'. Only 'Immediate Delivery' or 'Standard Delivery' with immediate subcategory (time.duration <= PT60M) is supported"`
+   - For "Standard Delivery" without immediate subcategory (duration > PT60M or missing), the response is: `"Order Validation Failed: unsupported delivery category 'Standard Delivery'. Standard Delivery is only accepted with immediate subcategory (time.duration <= PT60M)"`
+   - **Error Code**: `66002` (order validation failure)
+   - **Reference**: ONDC API Contract for Logistics (v1.2.0), lines 549-552
+
+3. **⚠️ Important:** **Billing Information Storage:**
+   - Billing information is **NOT** returned by the orchestrator in quote responses
+   - Billing is ONDC-specific and comes from the Buyer NP in the `/init` request
+   - When `/init` request is received, billing is extracted from `message.order.billing` and stored in Redis:
+     - **Redis Key:** `ondc_billing:{transaction_id}`
+     - **TTL:** 24 hours
+     - **Storage Location:** `internal/services/ondc/storage/billing_storage_service.go`
+   - Billing information is used in `/on_confirm` and other post-order APIs (per ONDC spec footnote [^118]: "billing should be same as in /init")
+   - **Reference**: ONDC API Contract for Logistics (v1.2.0), lines 697-715 (billing in /init), footnote [^55] (billing details for invoicing), footnote [^118] (billing consistency)
+
 ## ONDC Contracts
 
 1. *⚠️ **ONDC Contract Requirement - `/on_search` Pricing:**

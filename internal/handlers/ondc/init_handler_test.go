@@ -65,6 +65,28 @@ func (m *mockOrderServiceClient) InitiateRTO(ctx context.Context, dispatchOrderI
 	return args.Error(0)
 }
 
+type mockBillingStorageService struct {
+	mock.Mock
+}
+
+func (m *mockBillingStorageService) StoreBilling(ctx context.Context, transactionID string, billing map[string]interface{}) error {
+	args := m.Called(ctx, transactionID, billing)
+	return args.Error(0)
+}
+
+func (m *mockBillingStorageService) GetBilling(ctx context.Context, transactionID string) (map[string]interface{}, error) {
+	args := m.Called(ctx, transactionID)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(map[string]interface{}), args.Error(1)
+}
+
+func (m *mockBillingStorageService) DeleteBilling(ctx context.Context, transactionID string) error {
+	args := m.Called(ctx, transactionID)
+	return args.Error(0)
+}
+
 type mockOrderRecordService struct {
 	mock.Mock
 }
@@ -122,8 +144,9 @@ func TestInitHandler_Success(t *testing.T) {
 	orderServiceClient := new(mockOrderServiceClient)
 	orderRecordService := new(mockOrderRecordService)
 
+	billingStorageService := new(mockBillingStorageService)
 	auditService := new(mockAuditService)
-	handler := NewInitHandler(eventPublisher, eventConsumer, callbackService, idempotencyService, orderServiceClient, orderRecordService, auditService, "P1", "test-bpp-id", "https://bpp.example.com", logger)
+	handler := NewInitHandler(eventPublisher, eventConsumer, callbackService, idempotencyService, orderServiceClient, orderRecordService, billingStorageService, auditService, "P1", "test-bpp-id", "https://bpp.example.com", logger)
 
 	searchID := uuid.New().String()
 	transactionID := uuid.New().String()
@@ -272,8 +295,9 @@ func TestInitHandler_InvalidSearchID(t *testing.T) {
 	orderServiceClient := new(mockOrderServiceClient)
 	orderRecordService := new(mockOrderRecordService)
 
+	billingStorageService := new(mockBillingStorageService)
 	auditService := new(mockAuditService)
-	handler := NewInitHandler(eventPublisher, eventConsumer, callbackService, idempotencyService, orderServiceClient, orderRecordService, auditService, "P1", "test-bpp-id", "https://bpp.example.com", logger)
+	handler := NewInitHandler(eventPublisher, eventConsumer, callbackService, idempotencyService, orderServiceClient, orderRecordService, billingStorageService, auditService, "P1", "test-bpp-id", "https://bpp.example.com", logger)
 
 	searchID := uuid.New().String()
 	transactionID := uuid.New().String()
@@ -353,8 +377,9 @@ func TestInitHandler_QuoteInvalidated(t *testing.T) {
 	orderServiceClient := new(mockOrderServiceClient)
 	orderRecordService := new(mockOrderRecordService)
 
+	billingStorageService := new(mockBillingStorageService)
 	auditService := new(mockAuditService)
-	handler := NewInitHandler(eventPublisher, eventConsumer, callbackService, idempotencyService, orderServiceClient, orderRecordService, auditService, "P1", "test-bpp-id", "https://bpp.example.com", logger)
+	handler := NewInitHandler(eventPublisher, eventConsumer, callbackService, idempotencyService, orderServiceClient, orderRecordService, billingStorageService, auditService, "P1", "test-bpp-id", "https://bpp.example.com", logger)
 
 	searchID := uuid.New().String()
 	transactionID := uuid.New().String()

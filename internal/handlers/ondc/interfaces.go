@@ -99,6 +99,13 @@ type AuditService interface {
 	LogCallbackDelivery(ctx context.Context, req *audit.CallbackDeliveryLogParams) error
 }
 
+// BillingStorageService handles storage and retrieval of billing information
+type BillingStorageService interface {
+	StoreBilling(ctx context.Context, transactionID string, billing map[string]interface{}) error
+	GetBilling(ctx context.Context, transactionID string) (map[string]interface{}, error)
+	DeleteBilling(ctx context.Context, transactionID string) error
+}
+
 // OrderStatus represents order status from Order Service
 type OrderStatus struct {
 	DispatchOrderID string
