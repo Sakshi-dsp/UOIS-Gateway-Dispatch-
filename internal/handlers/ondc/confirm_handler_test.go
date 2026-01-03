@@ -30,9 +30,10 @@ func TestConfirmHandler_Success(t *testing.T) {
 	orderServiceClient := new(mockOrderServiceClient)
 	orderRecordService := new(mockOrderRecordService)
 	billingStorageService := new(mockBillingStorageService)
+	fulfillmentContactsStorageService := new(mockFulfillmentContactsStorageService)
 	auditService := new(mockAuditService)
 
-	handler := NewConfirmHandler(eventPublisher, eventConsumer, callbackService, idempotencyService, orderServiceClient, orderRecordService, billingStorageService, auditService, "test-bpp-id", "https://bpp.example.com", logger)
+	handler := NewConfirmHandler(eventPublisher, eventConsumer, callbackService, idempotencyService, orderServiceClient, orderRecordService, billingStorageService, fulfillmentContactsStorageService, auditService, "test-bpp-id", "https://bpp.example.com", logger)
 
 	quoteID := uuid.New().String()
 	transactionID := uuid.New().String()
@@ -47,6 +48,8 @@ func TestConfirmHandler_Success(t *testing.T) {
 
 	// Mock billing storage (billing retrieval is optional, may return nil)
 	billingStorageService.On("GetBilling", mock.Anything, mock.AnythingOfType("string")).Return(nil, nil).Maybe()
+	// Mock fulfillment contacts storage (contacts retrieval is optional, may return nil)
+	fulfillmentContactsStorageService.On("GetFulfillmentContacts", mock.Anything, mock.AnythingOfType("string")).Return(nil, nil).Maybe()
 
 	// Mock Order Service validation (quote_id TTL check)
 	orderServiceClient.On("ValidateQuoteIDTTL", mock.Anything, quoteID).Return(true, nil)
@@ -162,9 +165,10 @@ func TestConfirmHandler_InvalidQuoteID(t *testing.T) {
 	orderServiceClient := new(mockOrderServiceClient)
 	orderRecordService := new(mockOrderRecordService)
 	billingStorageService := new(mockBillingStorageService)
+	fulfillmentContactsStorageService := new(mockFulfillmentContactsStorageService)
 
 	auditService := new(mockAuditService)
-	handler := NewConfirmHandler(eventPublisher, eventConsumer, callbackService, idempotencyService, orderServiceClient, orderRecordService, billingStorageService, auditService, "test-bpp-id", "https://bpp.example.com", logger)
+	handler := NewConfirmHandler(eventPublisher, eventConsumer, callbackService, idempotencyService, orderServiceClient, orderRecordService, billingStorageService, fulfillmentContactsStorageService, auditService, "test-bpp-id", "https://bpp.example.com", logger)
 
 	transactionID := uuid.New().String()
 	messageID := uuid.New().String()
@@ -219,9 +223,10 @@ func TestConfirmHandler_OrderConfirmFailed(t *testing.T) {
 	orderServiceClient := new(mockOrderServiceClient)
 	orderRecordService := new(mockOrderRecordService)
 	billingStorageService := new(mockBillingStorageService)
+	fulfillmentContactsStorageService := new(mockFulfillmentContactsStorageService)
 
 	auditService := new(mockAuditService)
-	handler := NewConfirmHandler(eventPublisher, eventConsumer, callbackService, idempotencyService, orderServiceClient, orderRecordService, billingStorageService, auditService, "test-bpp-id", "https://bpp.example.com", logger)
+	handler := NewConfirmHandler(eventPublisher, eventConsumer, callbackService, idempotencyService, orderServiceClient, orderRecordService, billingStorageService, fulfillmentContactsStorageService, auditService, "test-bpp-id", "https://bpp.example.com", logger)
 
 	quoteID := uuid.New().String()
 	transactionID := uuid.New().String()

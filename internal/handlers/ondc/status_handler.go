@@ -10,6 +10,7 @@ import (
 	"uois-gateway/internal/models"
 	"uois-gateway/internal/services/audit"
 	"uois-gateway/internal/utils"
+	ondcUtils "uois-gateway/internal/utils/ondc"
 	"uois-gateway/pkg/errors"
 
 	"github.com/gin-gonic/gin"
@@ -19,16 +20,17 @@ import (
 
 // StatusHandler handles /status ONDC requests
 type StatusHandler struct {
-	callbackService      CallbackService
-	idempotencyService    IdempotencyService
-	orderServiceClient    OrderServiceClient
-	orderRecordService    OrderRecordService
-	billingStorageService BillingStorageService
-	auditService          AuditService
-	cacheService          CacheService
-	bppID                 string // BPP ID (ONDC-registered Seller NP identity)
-	bppURI                string // BPP URI
-	logger                *zap.Logger
+	callbackService                   CallbackService
+	idempotencyService                IdempotencyService
+	orderServiceClient                OrderServiceClient
+	orderRecordService                OrderRecordService
+	billingStorageService             BillingStorageService
+	fulfillmentContactsStorageService FulfillmentContactsStorageService
+	auditService                      AuditService
+	cacheService                      CacheService
+	bppID                             string // BPP ID (ONDC-registered Seller NP identity)
+	bppURI                            string // BPP URI
+	logger                            *zap.Logger
 }
 
 // NewStatusHandler creates a new status handler
@@ -38,6 +40,7 @@ func NewStatusHandler(
 	orderServiceClient OrderServiceClient,
 	orderRecordService OrderRecordService,
 	billingStorageService BillingStorageService,
+	fulfillmentContactsStorageService FulfillmentContactsStorageService,
 	auditService AuditService,
 	cacheService CacheService,
 	bppID string,
@@ -45,16 +48,17 @@ func NewStatusHandler(
 	logger *zap.Logger,
 ) *StatusHandler {
 	return &StatusHandler{
-		callbackService:       callbackService,
-		idempotencyService:     idempotencyService,
-		orderServiceClient:     orderServiceClient,
-		orderRecordService:     orderRecordService,
-		billingStorageService:  billingStorageService,
-		auditService:           auditService,
-		cacheService:           cacheService,
-		bppID:                  bppID,
-		bppURI:                 bppURI,
-		logger:                 logger,
+		callbackService:                   callbackService,
+		idempotencyService:                idempotencyService,
+		orderServiceClient:                orderServiceClient,
+		orderRecordService:                orderRecordService,
+		billingStorageService:             billingStorageService,
+		fulfillmentContactsStorageService: fulfillmentContactsStorageService,
+		auditService:                      auditService,
+		cacheService:                      cacheService,
+		bppID:                             bppID,
+		bppURI:                            bppURI,
+		logger:                            logger,
 	}
 }
 
@@ -261,25 +265,8 @@ func (h *StatusHandler) buildOnStatusCallback(ctx context.Context, req *models.O
 		fulfillmentStateCode = "IN_TRANSIT"
 	}
 
-	// Build ONDC-compliant structure: order.fulfillments[] array
-	fulfillment := map[string]interface{}{
-		"id": fulfillmentID, // Stable fulfillment ID (reused from /init)
-		"state": map[string]interface{}{
-			"descriptor": map[string]interface{}{
-				"code": fulfillmentStateCode,
-			},
-		},
-	}
-
-	// Add rider info if available
-	if orderStatus.RiderID != "" {
-		fulfillment["agent"] = map[string]interface{}{
-			"id": orderStatus.RiderID,
-		}
-	}
-
-	// Note: POP/POD removed - ONDC uses documents/tags/images, not location.descriptor.name
-	// For certification, omit POP/POD or implement via domain-specific extensions
+	// Build ONDC-compliant structure: order.fulfillments[] array with contacts
+	fulfillment := h.buildFulfillmentWithContacts(ctx, req, fulfillmentID, orderStatus.RiderID, fulfillmentStateCode)
 
 	// Retrieve billing: first from request, then from Redis (stored during /init)
 	billing := h.getBilling(ctx, req)
@@ -305,6 +292,71 @@ func (h *StatusHandler) buildOnStatusCallback(ctx context.Context, req *models.O
 	}
 }
 
+// buildFulfillmentWithContacts builds fulfillment structure with contacts and rider info
+func (h *StatusHandler) buildFulfillmentWithContacts(ctx context.Context, req *models.ONDCRequest, fulfillmentID string, riderID string, fulfillmentStateCode string) map[string]interface{} {
+	fulfillment := map[string]interface{}{
+		"id": fulfillmentID, // Stable fulfillment ID (reused from /init)
+		"state": map[string]interface{}{
+			"descriptor": map[string]interface{}{
+				"code": fulfillmentStateCode,
+			},
+		},
+	}
+
+	// Add rider info if available
+	if riderID != "" {
+		fulfillment["agent"] = map[string]interface{}{
+			"id": riderID,
+		}
+	}
+
+	// Retrieve contacts: first from request, then from Redis (stored during /init or /confirm)
+	contacts := h.getFulfillmentContacts(ctx, req)
+
+	// Extract fulfillment structure from request to get locations
+	order, _ := req.Message["order"].(map[string]interface{})
+	fulfillments, _ := order["fulfillments"].([]interface{})
+	if len(fulfillments) > 0 {
+		if origFulfillment, ok := fulfillments[0].(map[string]interface{}); ok {
+			// Copy start location structure
+			if start, ok := origFulfillment["start"].(map[string]interface{}); ok {
+				startCopy := make(map[string]interface{})
+				if location, ok := start["location"].(map[string]interface{}); ok {
+					startCopy["location"] = location
+				}
+				// Add contact if available
+				if contacts != nil {
+					if startContact, ok := contacts["start"].(map[string]interface{}); ok {
+						startCopy["contact"] = startContact
+					}
+				}
+				if len(startCopy) > 0 {
+					fulfillment["start"] = startCopy
+				}
+			}
+
+			// Copy end location structure
+			if end, ok := origFulfillment["end"].(map[string]interface{}); ok {
+				endCopy := make(map[string]interface{})
+				if location, ok := end["location"].(map[string]interface{}); ok {
+					endCopy["location"] = location
+				}
+				// Add contact if available
+				if contacts != nil {
+					if endContact, ok := contacts["end"].(map[string]interface{}); ok {
+						endCopy["contact"] = endContact
+					}
+				}
+				if len(endCopy) > 0 {
+					fulfillment["end"] = endCopy
+				}
+			}
+		}
+	}
+
+	return fulfillment
+}
+
 // getBilling retrieves billing information: first from request, then from Redis
 func (h *StatusHandler) getBilling(ctx context.Context, req *models.ONDCRequest) map[string]interface{} {
 	// First: Check if billing exists in the current request
@@ -324,6 +376,29 @@ func (h *StatusHandler) getBilling(ctx context.Context, req *models.ONDCRequest)
 		// Non-fatal: log but don't fail if billing retrieval fails
 		if err != nil {
 			h.logger.Debug("failed to retrieve billing from storage", zap.Error(err), zap.String("transaction_id", req.Context.TransactionID))
+		}
+	}
+
+	return nil
+}
+
+// getFulfillmentContacts retrieves fulfillment contacts: first from request, then from Redis
+func (h *StatusHandler) getFulfillmentContacts(ctx context.Context, req *models.ONDCRequest) map[string]interface{} {
+	// First: Check if contacts exist in the current request
+	contacts := ondcUtils.ExtractFulfillmentContactsFromRequest(req.Message)
+	if contacts != nil {
+		return contacts
+	}
+
+	// Second: Retrieve from Redis using transaction_id (if stored during /init or /confirm)
+	if h.fulfillmentContactsStorageService != nil {
+		storedContacts, err := h.fulfillmentContactsStorageService.GetFulfillmentContacts(ctx, req.Context.TransactionID)
+		if err == nil && storedContacts != nil {
+			return storedContacts
+		}
+		// Non-fatal: log but don't fail if contacts retrieval fails
+		if err != nil {
+			h.logger.Debug("failed to retrieve fulfillment contacts from storage", zap.Error(err), zap.String("transaction_id", req.Context.TransactionID))
 		}
 	}
 

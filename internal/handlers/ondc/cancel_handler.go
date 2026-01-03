@@ -10,6 +10,7 @@ import (
 	"uois-gateway/internal/models"
 	"uois-gateway/internal/services/audit"
 	"uois-gateway/internal/utils"
+	ondcUtils "uois-gateway/internal/utils/ondc"
 	"uois-gateway/pkg/errors"
 
 	"github.com/gin-gonic/gin"
@@ -19,15 +20,16 @@ import (
 
 // CancelHandler handles /cancel ONDC requests
 type CancelHandler struct {
-	callbackService      CallbackService
-	idempotencyService    IdempotencyService
-	orderServiceClient   OrderServiceClient
-	orderRecordService    OrderRecordService
-	billingStorageService BillingStorageService
-	auditService          AuditService
-	bppID                 string // BPP ID (ONDC-registered Seller NP identity)
-	bppURI                string // BPP URI
-	logger                *zap.Logger
+	callbackService                   CallbackService
+	idempotencyService                IdempotencyService
+	orderServiceClient                OrderServiceClient
+	orderRecordService                OrderRecordService
+	billingStorageService             BillingStorageService
+	fulfillmentContactsStorageService FulfillmentContactsStorageService
+	auditService                      AuditService
+	bppID                             string // BPP ID (ONDC-registered Seller NP identity)
+	bppURI                            string // BPP URI
+	logger                            *zap.Logger
 }
 
 // NewCancelHandler creates a new cancel handler
@@ -37,21 +39,23 @@ func NewCancelHandler(
 	orderServiceClient OrderServiceClient,
 	orderRecordService OrderRecordService,
 	billingStorageService BillingStorageService,
+	fulfillmentContactsStorageService FulfillmentContactsStorageService,
 	auditService AuditService,
 	bppID string,
 	bppURI string,
 	logger *zap.Logger,
 ) *CancelHandler {
 	return &CancelHandler{
-		callbackService:       callbackService,
-		idempotencyService:     idempotencyService,
-		orderServiceClient:     orderServiceClient,
-		orderRecordService:     orderRecordService,
-		billingStorageService:  billingStorageService,
-		auditService:           auditService,
-		bppID:                  bppID,
-		bppURI:                 bppURI,
-		logger:                 logger,
+		callbackService:                   callbackService,
+		idempotencyService:                idempotencyService,
+		orderServiceClient:                orderServiceClient,
+		orderRecordService:                orderRecordService,
+		billingStorageService:             billingStorageService,
+		fulfillmentContactsStorageService: fulfillmentContactsStorageService,
+		auditService:                      auditService,
+		bppID:                             bppID,
+		bppURI:                            bppURI,
+		logger:                            logger,
 	}
 }
 
@@ -244,6 +248,64 @@ func (h *CancelHandler) buildOnCancelCallback(ctx context.Context, req *models.O
 	}
 }
 
+// buildFulfillmentWithContacts builds fulfillment structure with contacts
+func (h *CancelHandler) buildFulfillmentWithContacts(ctx context.Context, req *models.ONDCRequest, fulfillmentID string) map[string]interface{} {
+	fulfillment := map[string]interface{}{
+		"id": fulfillmentID, // Stable fulfillment ID (reused from /init)
+		"state": map[string]interface{}{
+			"descriptor": map[string]interface{}{
+				"code": "CANCELLED", // Cancellation state in fulfillment
+			},
+		},
+	}
+
+	// Retrieve contacts: first from request, then from Redis (stored during /init or /confirm)
+	contacts := h.getFulfillmentContacts(ctx, req)
+
+	// Extract fulfillment structure from request to get locations
+	order, _ := req.Message["order"].(map[string]interface{})
+	fulfillments, _ := order["fulfillments"].([]interface{})
+	if len(fulfillments) > 0 {
+		if origFulfillment, ok := fulfillments[0].(map[string]interface{}); ok {
+			// Copy start location structure
+			if start, ok := origFulfillment["start"].(map[string]interface{}); ok {
+				startCopy := make(map[string]interface{})
+				if location, ok := start["location"].(map[string]interface{}); ok {
+					startCopy["location"] = location
+				}
+				// Add contact if available
+				if contacts != nil {
+					if startContact, ok := contacts["start"].(map[string]interface{}); ok {
+						startCopy["contact"] = startContact
+					}
+				}
+				if len(startCopy) > 0 {
+					fulfillment["start"] = startCopy
+				}
+			}
+
+			// Copy end location structure
+			if end, ok := origFulfillment["end"].(map[string]interface{}); ok {
+				endCopy := make(map[string]interface{})
+				if location, ok := end["location"].(map[string]interface{}); ok {
+					endCopy["location"] = location
+				}
+				// Add contact if available
+				if contacts != nil {
+					if endContact, ok := contacts["end"].(map[string]interface{}); ok {
+						endCopy["contact"] = endContact
+					}
+				}
+				if len(endCopy) > 0 {
+					fulfillment["end"] = endCopy
+				}
+			}
+		}
+	}
+
+	return fulfillment
+}
+
 // getBilling retrieves billing information: first from request, then from Redis
 func (h *CancelHandler) getBilling(ctx context.Context, req *models.ONDCRequest) map[string]interface{} {
 	// First: Check if billing exists in the current request
@@ -263,6 +325,29 @@ func (h *CancelHandler) getBilling(ctx context.Context, req *models.ONDCRequest)
 		// Non-fatal: log but don't fail if billing retrieval fails
 		if err != nil {
 			h.logger.Debug("failed to retrieve billing from storage", zap.Error(err), zap.String("transaction_id", req.Context.TransactionID))
+		}
+	}
+
+	return nil
+}
+
+// getFulfillmentContacts retrieves fulfillment contacts: first from request, then from Redis
+func (h *CancelHandler) getFulfillmentContacts(ctx context.Context, req *models.ONDCRequest) map[string]interface{} {
+	// First: Check if contacts exist in the current request
+	contacts := ondcUtils.ExtractFulfillmentContactsFromRequest(req.Message)
+	if contacts != nil {
+		return contacts
+	}
+
+	// Second: Retrieve from Redis using transaction_id (if stored during /init or /confirm)
+	if h.fulfillmentContactsStorageService != nil {
+		storedContacts, err := h.fulfillmentContactsStorageService.GetFulfillmentContacts(ctx, req.Context.TransactionID)
+		if err == nil && storedContacts != nil {
+			return storedContacts
+		}
+		// Non-fatal: log but don't fail if contacts retrieval fails
+		if err != nil {
+			h.logger.Debug("failed to retrieve fulfillment contacts from storage", zap.Error(err), zap.String("transaction_id", req.Context.TransactionID))
 		}
 	}
 

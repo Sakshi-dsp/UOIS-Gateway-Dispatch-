@@ -450,6 +450,166 @@ func (h *InitHandler) extractBilling(req *models.ONDCRequest) map[string]interfa
 - Missing billing (optional field) is handled gracefully
 - Invalid transaction_id returns error
 
+### Fulfillment Contacts Storage
+
+**ONDC Requirement**: Fulfillment contacts (`start.contact` and `end.contact`) are provided by Buyer NP in `/init` and `/confirm` requests. These contacts represent the pickup location contact (merchant/warehouse staff) and delivery location contact (customer). ONDC contract requires these contacts to be included in `/on_init`, `/on_confirm`, `/on_status`, and `/on_cancel` responses.
+
+**UOIS Gateway Implementation**:
+- **Location**: `internal/services/ondc/storage/fulfillment_contacts_storage_service.go`
+- **Service Interface**: `FulfillmentContactsStorageService`
+- **Storage Backend**: Redis (via `CacheService`)
+- **Redis Key Pattern**: `ondc_fulfillment_contacts:{transaction_id}`
+- **TTL**: 30 days (same as order mapping)
+
+**Implementation Details**:
+
+#### Fulfillment Contacts Storage Service
+- **Location**: `internal/services/ondc/storage/fulfillment_contacts_storage_service.go`
+- **Interface Methods**:
+  - `StoreFulfillmentContacts(ctx context.Context, transactionID string, contacts map[string]interface{}) error`
+  - `GetFulfillmentContacts(ctx context.Context, transactionID string) (map[string]interface{}, error)`
+  - `DeleteFulfillmentContacts(ctx context.Context, transactionID string) error`
+
+**Service Implementation**:
+```go
+type FulfillmentContactsService struct {
+    cache  CacheService
+    logger *zap.Logger
+    ttl    time.Duration // 30 days
+}
+
+func (s *FulfillmentContactsService) StoreFulfillmentContacts(ctx context.Context, transactionID string, contacts map[string]interface{}) error {
+    key := fmt.Sprintf("ondc_fulfillment_contacts:%s", transactionID)
+    return s.cache.Set(ctx, key, contacts) // TTL set at service creation
+}
+```
+
+**Contact Extraction Utility**:
+- **Location**: `internal/utils/ondc/request_parser.go`
+- **Function**: `ExtractFulfillmentContactsFromRequest(message map[string]interface{}) map[string]interface{}`
+- **Extraction Logic**: Extracts `fulfillments[0].start.contact` and `fulfillments[0].end.contact` from request message
+- **Return Format**: Map with `"start"` and `"end"` keys, each containing contact object
+
+```go
+func ExtractFulfillmentContactsFromRequest(message map[string]interface{}) map[string]interface{} {
+    order, ok := message["order"].(map[string]interface{})
+    if !ok {
+        return nil
+    }
+    fulfillments, ok := order["fulfillments"].([]interface{})
+    if !ok || len(fulfillments) == 0 {
+        return nil
+    }
+    fulfillment, ok := fulfillments[0].(map[string]interface{})
+    if !ok {
+        return nil
+    }
+    result := make(map[string]interface{})
+    // Extract start contact
+    if start, ok := fulfillment["start"].(map[string]interface{}); ok {
+        if contact, ok := start["contact"].(map[string]interface{}); ok && contact != nil {
+            result["start"] = contact
+        }
+    }
+    // Extract end contact
+    if end, ok := fulfillment["end"].(map[string]interface{}); ok {
+        if contact, ok := end["contact"].(map[string]interface{}); ok && contact != nil {
+            result["end"] = contact
+        }
+    }
+    if len(result) == 0 {
+        return nil
+    }
+    return result
+}
+```
+
+#### `/init` Handler Integration
+- **Location**: `internal/handlers/ondc/init_handler.go` (lines 187-195)
+- **Integration Point**: After billing storage, before publishing INIT_REQUESTED event
+- **Data Source**: `message.order.fulfillments[0].start.contact` and `message.order.fulfillments[0].end.contact` from `/init` request
+- **Storage Key**: Uses `transaction_id` from request context
+
+```go
+// Extract fulfillment contacts and store in Redis
+if h.fulfillmentContactsStorageService != nil {
+    contacts := h.extractFulfillmentContacts(&req)
+    if contacts != nil {
+        if err := h.fulfillmentContactsStorageService.StoreFulfillmentContacts(ctx, req.Context.TransactionID, contacts); err != nil {
+            h.logger.Warn("failed to store fulfillment contacts", zap.Error(err), zap.String("trace_id", traceID), zap.String("transaction_id", req.Context.TransactionID))
+            // Non-fatal error - continue processing even if storage fails
+        }
+    }
+}
+```
+
+#### `/confirm` Handler Integration
+- **Location**: `internal/handlers/ondc/confirm_handler.go` (lines 208-218)
+- **Integration Point**: After order record update, before composing response
+- **Data Source**: `message.order.fulfillments[0].start.contact` and `message.order.fulfillments[0].end.contact` from `/confirm` request
+- **Storage Key**: Uses `transaction_id` from request context
+- **Note**: Contacts from `/confirm` may update or supplement contacts stored during `/init`
+
+```go
+// Extract fulfillment contacts and store in Redis (if not already stored by /init)
+if h.fulfillmentContactsStorageService != nil {
+    contacts := ondcUtils.ExtractFulfillmentContactsFromRequest(req.Message)
+    if contacts != nil {
+        if err := h.fulfillmentContactsStorageService.StoreFulfillmentContacts(ctx, req.Context.TransactionID, contacts); err != nil {
+            h.logger.Warn("failed to store fulfillment contacts during /confirm", zap.Error(err), zap.String("trace_id", traceID), zap.String("transaction_id", req.Context.TransactionID))
+            // Non-fatal error - continue processing even if storage fails
+        }
+    }
+}
+```
+
+#### Contact Retrieval in Callback Builders
+- **Location**: All callback builders (`buildOnInitCallback`, `buildOnConfirmCallback`, `buildOnStatusCallback`, `buildOnCancelCallback`)
+- **Retrieval Priority**:
+  1. First: Check if contacts exist in the current request (for `/confirm`, `/status`, `/cancel`)
+  2. Second: Retrieve from Redis using `transaction_id` (if stored during `/init` or `/confirm`)
+- **Integration**: Contacts are retrieved and included in fulfillment structure using `buildFulfillmentWithContacts` helper methods
+
+**Contact Structure** (per ONDC spec):
+```json
+{
+  "name": "Sherlock Holmes",  // Optional
+  "phone": "9886098860",      // Required
+  "email": "sherlock@detective.com"  // Required
+}
+```
+
+**ONDC Compliance**:
+- ✅ Contacts extracted from `/init` and `/confirm` requests
+- ✅ Stored with transaction_id as key for correlation
+- ✅ TTL of 30 days matches order mapping lifecycle
+- ✅ Non-fatal storage - order processing continues even if contact storage fails
+- ✅ Contacts retrieved and included in all callback responses (`/on_init`, `/on_confirm`, `/on_status`, `/on_cancel`)
+- ✅ Ensures consistency - Buyer NP receives the same contact information they originally provided
+
+**Usage in Callback Responses**:
+- Contacts stored during `/init` or `/confirm` are retrieved using `GetFulfillmentContacts(transactionID)` for use in:
+  - `/on_init` callback - `fulfillment.start.contact` and `fulfillment.end.contact`
+  - `/on_confirm` callback - `fulfillment.start.contact` and `fulfillment.end.contact`
+  - `/on_status` callback - `fulfillment.start.contact` and `fulfillment.end.contact`
+  - `/on_cancel` callback - `fulfillment.start.contact` and `fulfillment.end.contact`
+
+**Why Store Contacts**:
+- The orchestrator's location data may not always include the exact contact details (email, phone, name) that the Buyer NP provided
+- By storing the original contacts from the Buyer NP's request, we ensure consistency across all ONDC responses
+- This prevents mismatches between what the Buyer NP sent and what they receive in callbacks
+
+**Dependency**: 
+- Requires `CacheService` (Redis) to be configured and available
+- Contact storage is non-blocking - order processing continues even if storage fails
+- Storage failures are logged but do not cause request rejection
+
+**Error Handling**:
+- Storage failures are logged as warnings but do not block order processing
+- Missing contacts (optional field) are handled gracefully
+- Invalid transaction_id returns error
+- Contacts are optional per ONDC spec - absence does not cause errors
+
 ## References
 
 - [ONDC Error Codes](https://github.com/ONDC-Official/developer-docs/blob/main/protocol-network-extension/error-codes.md)

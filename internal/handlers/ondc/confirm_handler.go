@@ -11,6 +11,7 @@ import (
 	"uois-gateway/internal/models"
 	"uois-gateway/internal/services/audit"
 	"uois-gateway/internal/utils"
+	ondcUtils "uois-gateway/internal/utils/ondc"
 	"uois-gateway/pkg/errors"
 
 	"github.com/gin-gonic/gin"
@@ -20,17 +21,18 @@ import (
 
 // ConfirmHandler handles /confirm ONDC requests
 type ConfirmHandler struct {
-	eventPublisher        EventPublisher
-	eventConsumer         EventConsumer
-	callbackService       CallbackService
-	idempotencyService    IdempotencyService
-	orderServiceClient    OrderServiceClient
-	orderRecordService    OrderRecordService
-	billingStorageService BillingStorageService
-	auditService          AuditService
-	bppID                 string // BPP ID (ONDC-registered Seller NP identity)
-	bppURI                string // BPP URI
-	logger                *zap.Logger
+	eventPublisher                    EventPublisher
+	eventConsumer                     EventConsumer
+	callbackService                   CallbackService
+	idempotencyService                IdempotencyService
+	orderServiceClient                OrderServiceClient
+	orderRecordService                OrderRecordService
+	billingStorageService             BillingStorageService
+	fulfillmentContactsStorageService FulfillmentContactsStorageService
+	auditService                      AuditService
+	bppID                             string // BPP ID (ONDC-registered Seller NP identity)
+	bppURI                            string // BPP URI
+	logger                            *zap.Logger
 }
 
 // NewConfirmHandler creates a new confirm handler
@@ -42,23 +44,25 @@ func NewConfirmHandler(
 	orderServiceClient OrderServiceClient,
 	orderRecordService OrderRecordService,
 	billingStorageService BillingStorageService,
+	fulfillmentContactsStorageService FulfillmentContactsStorageService,
 	auditService AuditService,
 	bppID string,
 	bppURI string,
 	logger *zap.Logger,
 ) *ConfirmHandler {
 	return &ConfirmHandler{
-		eventPublisher:        eventPublisher,
-		eventConsumer:         eventConsumer,
-		callbackService:       callbackService,
-		idempotencyService:    idempotencyService,
-		orderServiceClient:    orderServiceClient,
-		orderRecordService:    orderRecordService,
-		billingStorageService: billingStorageService,
-		auditService:          auditService,
-		bppID:                 bppID,
-		bppURI:                bppURI,
-		logger:                logger,
+		eventPublisher:                    eventPublisher,
+		eventConsumer:                     eventConsumer,
+		callbackService:                   callbackService,
+		idempotencyService:                idempotencyService,
+		orderServiceClient:                orderServiceClient,
+		orderRecordService:                orderRecordService,
+		billingStorageService:             billingStorageService,
+		fulfillmentContactsStorageService: fulfillmentContactsStorageService,
+		auditService:                      auditService,
+		bppID:                             bppID,
+		bppURI:                            bppURI,
+		logger:                            logger,
 	}
 }
 
@@ -200,6 +204,17 @@ func (h *ConfirmHandler) HandleConfirm(c *gin.Context) {
 		orderRecord.ClientID = clientID
 		if err := h.orderRecordService.UpdateOrderRecord(ctx, orderRecord); err != nil {
 			h.logger.Warn("failed to update order record with dispatch_order_id and order.id", zap.Error(err), zap.String("trace_id", traceID), zap.String("quote_id", quoteID), zap.String("dispatch_order_id", orderConfirmed.DispatchOrderID), zap.String("order.id", orderID))
+		}
+	}
+
+	// Extract fulfillment contacts and store in Redis (if not already stored by /init)
+	if h.fulfillmentContactsStorageService != nil {
+		contacts := ondcUtils.ExtractFulfillmentContactsFromRequest(req.Message)
+		if contacts != nil {
+			if err := h.fulfillmentContactsStorageService.StoreFulfillmentContacts(ctx, req.Context.TransactionID, contacts); err != nil {
+				h.logger.Warn("failed to store fulfillment contacts during /confirm", zap.Error(err), zap.String("trace_id", traceID), zap.String("transaction_id", req.Context.TransactionID))
+				// Non-fatal error - continue processing even if storage fails
+			}
 		}
 	}
 
@@ -370,21 +385,7 @@ func (h *ConfirmHandler) buildOnConfirmCallback(ctx context.Context, req *models
 		}
 
 		// Build ONDC-compliant structure: order.fulfillments[] array (not singular fulfillment)
-		fulfillment := map[string]interface{}{
-			"id": fulfillmentID, // Stable fulfillment ID (reused from /init)
-			"state": map[string]interface{}{
-				"descriptor": map[string]interface{}{
-					"code": "RIDER_ASSIGNED",
-				},
-			},
-		}
-
-		// Add rider info if assigned
-		if orderConfirmed.RiderID != "" {
-			fulfillment["agent"] = map[string]interface{}{
-				"id": orderConfirmed.RiderID,
-			}
-		}
+		fulfillment := h.buildFulfillmentWithContacts(ctx, req, fulfillmentID, orderConfirmed.RiderID)
 
 		// Retrieve billing: first from request, then from Redis (stored during /init)
 		billing := h.getBilling(ctx, req)
@@ -434,6 +435,71 @@ func (h *ConfirmHandler) buildOnConfirmCallback(ctx context.Context, req *models
 	}
 }
 
+// buildFulfillmentWithContacts builds fulfillment structure with contacts and rider info
+func (h *ConfirmHandler) buildFulfillmentWithContacts(ctx context.Context, req *models.ONDCRequest, fulfillmentID string, riderID string) map[string]interface{} {
+	fulfillment := map[string]interface{}{
+		"id": fulfillmentID, // Stable fulfillment ID (reused from /init)
+		"state": map[string]interface{}{
+			"descriptor": map[string]interface{}{
+				"code": "RIDER_ASSIGNED",
+			},
+		},
+	}
+
+	// Add rider info if assigned
+	if riderID != "" {
+		fulfillment["agent"] = map[string]interface{}{
+			"id": riderID,
+		}
+	}
+
+	// Retrieve contacts: first from request, then from Redis (stored during /init or /confirm)
+	contacts := h.getFulfillmentContacts(ctx, req)
+
+	// Extract fulfillment structure from request to get locations
+	order, _ := req.Message["order"].(map[string]interface{})
+	fulfillments, _ := order["fulfillments"].([]interface{})
+	if len(fulfillments) > 0 {
+		if origFulfillment, ok := fulfillments[0].(map[string]interface{}); ok {
+			// Copy start location structure
+			if start, ok := origFulfillment["start"].(map[string]interface{}); ok {
+				startCopy := make(map[string]interface{})
+				if location, ok := start["location"].(map[string]interface{}); ok {
+					startCopy["location"] = location
+				}
+				// Add contact if available
+				if contacts != nil {
+					if startContact, ok := contacts["start"].(map[string]interface{}); ok {
+						startCopy["contact"] = startContact
+					}
+				}
+				if len(startCopy) > 0 {
+					fulfillment["start"] = startCopy
+				}
+			}
+
+			// Copy end location structure
+			if end, ok := origFulfillment["end"].(map[string]interface{}); ok {
+				endCopy := make(map[string]interface{})
+				if location, ok := end["location"].(map[string]interface{}); ok {
+					endCopy["location"] = location
+				}
+				// Add contact if available
+				if contacts != nil {
+					if endContact, ok := contacts["end"].(map[string]interface{}); ok {
+						endCopy["contact"] = endContact
+					}
+				}
+				if len(endCopy) > 0 {
+					fulfillment["end"] = endCopy
+				}
+			}
+		}
+	}
+
+	return fulfillment
+}
+
 // getBilling retrieves billing information: first from request, then from Redis
 func (h *ConfirmHandler) getBilling(ctx context.Context, req *models.ONDCRequest) map[string]interface{} {
 	// First: Check if billing exists in the current request
@@ -453,6 +519,29 @@ func (h *ConfirmHandler) getBilling(ctx context.Context, req *models.ONDCRequest
 		// Non-fatal: log but don't fail if billing retrieval fails
 		if err != nil {
 			h.logger.Debug("failed to retrieve billing from storage", zap.Error(err), zap.String("transaction_id", req.Context.TransactionID))
+		}
+	}
+
+	return nil
+}
+
+// getFulfillmentContacts retrieves fulfillment contacts: first from request, then from Redis
+func (h *ConfirmHandler) getFulfillmentContacts(ctx context.Context, req *models.ONDCRequest) map[string]interface{} {
+	// First: Check if contacts exist in the current request
+	contacts := ondcUtils.ExtractFulfillmentContactsFromRequest(req.Message)
+	if contacts != nil {
+		return contacts
+	}
+
+	// Second: Retrieve from Redis using transaction_id (if stored during /init or /confirm)
+	if h.fulfillmentContactsStorageService != nil {
+		storedContacts, err := h.fulfillmentContactsStorageService.GetFulfillmentContacts(ctx, req.Context.TransactionID)
+		if err == nil && storedContacts != nil {
+			return storedContacts
+		}
+		// Non-fatal: log but don't fail if contacts retrieval fails
+		if err != nil {
+			h.logger.Debug("failed to retrieve fulfillment contacts from storage", zap.Error(err), zap.String("transaction_id", req.Context.TransactionID))
 		}
 	}
 

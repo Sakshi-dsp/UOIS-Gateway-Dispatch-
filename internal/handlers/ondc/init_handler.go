@@ -11,6 +11,7 @@ import (
 	"uois-gateway/internal/models"
 	"uois-gateway/internal/services/audit"
 	"uois-gateway/internal/utils"
+	ondcUtils "uois-gateway/internal/utils/ondc"
 	"uois-gateway/pkg/errors"
 
 	"github.com/gin-gonic/gin"
@@ -20,18 +21,19 @@ import (
 
 // InitHandler handles /init ONDC requests
 type InitHandler struct {
-	eventPublisher        EventPublisher
-	eventConsumer         EventConsumer
-	callbackService       CallbackService
-	idempotencyService    IdempotencyService
-	orderServiceClient    OrderServiceClient
-	orderRecordService    OrderRecordService
-	billingStorageService BillingStorageService
-	auditService          AuditService
-	providerID            string // Stable provider identifier (e.g., "P1")
-	bppID                 string // BPP ID (ONDC-registered Seller NP identity)
-	bppURI                string // BPP URI
-	logger                *zap.Logger
+	eventPublisher                    EventPublisher
+	eventConsumer                     EventConsumer
+	callbackService                   CallbackService
+	idempotencyService                IdempotencyService
+	orderServiceClient                OrderServiceClient
+	orderRecordService                OrderRecordService
+	billingStorageService             BillingStorageService
+	fulfillmentContactsStorageService FulfillmentContactsStorageService
+	auditService                      AuditService
+	providerID                        string // Stable provider identifier (e.g., "P1")
+	bppID                             string // BPP ID (ONDC-registered Seller NP identity)
+	bppURI                            string // BPP URI
+	logger                            *zap.Logger
 }
 
 // NewInitHandler creates a new init handler
@@ -43,6 +45,7 @@ func NewInitHandler(
 	orderServiceClient OrderServiceClient,
 	orderRecordService OrderRecordService,
 	billingStorageService BillingStorageService,
+	fulfillmentContactsStorageService FulfillmentContactsStorageService,
 	auditService AuditService,
 	providerID string,
 	bppID string,
@@ -50,18 +53,19 @@ func NewInitHandler(
 	logger *zap.Logger,
 ) *InitHandler {
 	return &InitHandler{
-		eventPublisher:        eventPublisher,
-		eventConsumer:         eventConsumer,
-		callbackService:       callbackService,
-		idempotencyService:    idempotencyService,
-		orderServiceClient:    orderServiceClient,
-		orderRecordService:    orderRecordService,
-		billingStorageService: billingStorageService,
-		auditService:          auditService,
-		providerID:            providerID,
-		bppID:                 bppID,
-		bppURI:                bppURI,
-		logger:                logger,
+		eventPublisher:                    eventPublisher,
+		eventConsumer:                     eventConsumer,
+		callbackService:                   callbackService,
+		idempotencyService:                idempotencyService,
+		orderServiceClient:                orderServiceClient,
+		orderRecordService:                orderRecordService,
+		billingStorageService:             billingStorageService,
+		fulfillmentContactsStorageService: fulfillmentContactsStorageService,
+		auditService:                      auditService,
+		providerID:                        providerID,
+		bppID:                             bppID,
+		bppURI:                            bppURI,
+		logger:                            logger,
 	}
 }
 
@@ -176,6 +180,17 @@ func (h *InitHandler) HandleInit(c *gin.Context) {
 			if err := h.billingStorageService.StoreBilling(ctx, req.Context.TransactionID, billing); err != nil {
 				h.logger.Warn("failed to store billing", zap.Error(err), zap.String("trace_id", traceID), zap.String("transaction_id", req.Context.TransactionID))
 				// Non-fatal error - continue processing even if billing storage fails
+			}
+		}
+	}
+
+	// Extract fulfillment contacts and store in Redis
+	if h.fulfillmentContactsStorageService != nil {
+		contacts := h.extractFulfillmentContacts(&req)
+		if contacts != nil {
+			if err := h.fulfillmentContactsStorageService.StoreFulfillmentContacts(ctx, req.Context.TransactionID, contacts); err != nil {
+				h.logger.Warn("failed to store fulfillment contacts", zap.Error(err), zap.String("trace_id", traceID), zap.String("transaction_id", req.Context.TransactionID))
+				// Non-fatal error - continue processing even if contacts storage fails
 			}
 		}
 	}
@@ -368,6 +383,88 @@ func (h *InitHandler) extractBilling(req *models.ONDCRequest) map[string]interfa
 	return billing
 }
 
+func (h *InitHandler) extractFulfillmentContacts(req *models.ONDCRequest) map[string]interface{} {
+	// Use utility function to extract contacts
+	return ondcUtils.ExtractFulfillmentContactsFromRequest(req.Message)
+}
+
+// buildFulfillmentWithContacts builds fulfillment structure with contacts from request or Redis
+func (h *InitHandler) buildFulfillmentWithContacts(ctx context.Context, req *models.ONDCRequest, fulfillmentID string) map[string]interface{} {
+	fulfillment := map[string]interface{}{
+		"id":   fulfillmentID,
+		"type": "Delivery",
+	}
+
+	// Retrieve contacts: first from request, then from Redis (stored during /init)
+	contacts := h.getFulfillmentContacts(ctx, req)
+
+	// Extract fulfillment structure from request to get locations
+	order, _ := req.Message["order"].(map[string]interface{})
+	fulfillments, _ := order["fulfillments"].([]interface{})
+	if len(fulfillments) > 0 {
+		if origFulfillment, ok := fulfillments[0].(map[string]interface{}); ok {
+			// Copy start location structure
+			if start, ok := origFulfillment["start"].(map[string]interface{}); ok {
+				startCopy := make(map[string]interface{})
+				if location, ok := start["location"].(map[string]interface{}); ok {
+					startCopy["location"] = location
+				}
+				// Add contact if available
+				if contacts != nil {
+					if startContact, ok := contacts["start"].(map[string]interface{}); ok {
+						startCopy["contact"] = startContact
+					}
+				}
+				if len(startCopy) > 0 {
+					fulfillment["start"] = startCopy
+				}
+			}
+
+			// Copy end location structure
+			if end, ok := origFulfillment["end"].(map[string]interface{}); ok {
+				endCopy := make(map[string]interface{})
+				if location, ok := end["location"].(map[string]interface{}); ok {
+					endCopy["location"] = location
+				}
+				// Add contact if available
+				if contacts != nil {
+					if endContact, ok := contacts["end"].(map[string]interface{}); ok {
+						endCopy["contact"] = endContact
+					}
+				}
+				if len(endCopy) > 0 {
+					fulfillment["end"] = endCopy
+				}
+			}
+		}
+	}
+
+	return fulfillment
+}
+
+// getFulfillmentContacts retrieves fulfillment contacts: first from request, then from Redis
+func (h *InitHandler) getFulfillmentContacts(ctx context.Context, req *models.ONDCRequest) map[string]interface{} {
+	// First: Check if contacts exist in the current request
+	contacts := ondcUtils.ExtractFulfillmentContactsFromRequest(req.Message)
+	if contacts != nil {
+		return contacts
+	}
+
+	// Second: Retrieve from Redis using transaction_id (if stored during /init)
+	if h.fulfillmentContactsStorageService != nil {
+		storedContacts, err := h.fulfillmentContactsStorageService.GetFulfillmentContacts(ctx, req.Context.TransactionID)
+		if err == nil && storedContacts != nil {
+			return storedContacts
+		}
+		// Non-fatal: log but don't fail if contacts retrieval fails
+		if err != nil {
+			h.logger.Debug("failed to retrieve fulfillment contacts from storage", zap.Error(err), zap.String("transaction_id", req.Context.TransactionID))
+		}
+	}
+
+	return nil
+}
+
 func (h *InitHandler) extractItemsFromRequest(req *models.ONDCRequest) []map[string]interface{} {
 	order, ok := req.Message["order"].(map[string]interface{})
 	if !ok {
@@ -497,7 +594,7 @@ func (h *InitHandler) composeInitResponse(req *models.ONDCRequest, quoteEvent in
 
 func (h *InitHandler) sendInitCallback(ctx context.Context, req *models.ONDCRequest, quoteEvent interface{}, fulfillmentID string, traceID string) {
 	callbackURL := req.Context.BapURI + "/on_init"
-	callbackPayload := h.buildOnInitCallback(req, quoteEvent, fulfillmentID)
+	callbackPayload := h.buildOnInitCallback(ctx, req, quoteEvent, fulfillmentID)
 
 	if err := h.callbackService.SendCallback(ctx, callbackURL, callbackPayload); err != nil {
 		h.logger.Error("failed to send /on_init callback", zap.Error(err), zap.String("trace_id", traceID), zap.String("callback_url", callbackURL))
@@ -507,7 +604,7 @@ func (h *InitHandler) sendInitCallback(ctx context.Context, req *models.ONDCRequ
 	}
 }
 
-func (h *InitHandler) buildOnInitCallback(req *models.ONDCRequest, quoteEvent interface{}, fulfillmentID string) models.ONDCResponse {
+func (h *InitHandler) buildOnInitCallback(ctx context.Context, req *models.ONDCRequest, quoteEvent interface{}, fulfillmentID string) models.ONDCResponse {
 	// Regenerate callback context (ONDC protocol requirement)
 	callbackCtx := req.Context
 	callbackCtx.MessageID = uuid.New().String()
@@ -526,6 +623,9 @@ func (h *InitHandler) buildOnInitCallback(req *models.ONDCRequest, quoteEvent in
 			fulfillmentID = uuid.New().String()
 		}
 
+		// Build fulfillment with contacts (ONDC requirement)
+		fulfillment := h.buildFulfillmentWithContacts(ctx, req, fulfillmentID)
+
 		// Success case: QUOTE_CREATED
 		quoteMap := map[string]interface{}{
 			"id": quoteCreated.QuoteID,
@@ -543,8 +643,9 @@ func (h *InitHandler) buildOnInitCallback(req *models.ONDCRequest, quoteEvent in
 				"provider": map[string]interface{}{
 					"id": h.bppID,
 				},
-				"quote": quoteMap,
-				"items": h.buildItemsWithFulfillment(items, fulfillmentID, quoteCreated),
+				"quote":        quoteMap,
+				"items":        h.buildItemsWithFulfillment(items, fulfillmentID, quoteCreated),
+				"fulfillments": []map[string]interface{}{fulfillment},
 			},
 		}
 

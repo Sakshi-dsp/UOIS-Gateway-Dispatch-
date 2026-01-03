@@ -28,10 +28,11 @@ func TestStatusHandler_Success(t *testing.T) {
 	orderServiceClient := new(mockOrderServiceClient)
 	orderRecordService := new(mockOrderRecordService)
 	billingStorageService := new(mockBillingStorageService)
+	fulfillmentContactsStorageService := new(mockFulfillmentContactsStorageService)
 	auditService := new(mockAuditService)
 	cacheService := new(mockCacheService)
 
-	handler := NewStatusHandler(callbackService, idempotencyService, orderServiceClient, orderRecordService, billingStorageService, auditService, cacheService, "test-bpp-id", "https://bpp.example.com", logger)
+	handler := NewStatusHandler(callbackService, idempotencyService, orderServiceClient, orderRecordService, billingStorageService, fulfillmentContactsStorageService, auditService, cacheService, "test-bpp-id", "https://bpp.example.com", logger)
 
 	clientOrderID := uuid.New().String()
 	dispatchOrderID := uuid.New().String()
@@ -76,6 +77,9 @@ func TestStatusHandler_Success(t *testing.T) {
 		},
 	}
 	orderServiceClient.On("GetOrder", mock.Anything, dispatchOrderID).Return(orderStatus, nil)
+
+	// Mock fulfillment contacts storage (contacts retrieval is optional, may return nil)
+	fulfillmentContactsStorageService.On("GetFulfillmentContacts", mock.Anything, mock.AnythingOfType("string")).Return(nil, nil).Maybe()
 
 	callbackService.On("SendCallback", mock.Anything, mock.MatchedBy(func(url string) bool {
 		return strings.HasSuffix(url, "/on_status")
@@ -133,10 +137,11 @@ func TestStatusHandler_OrderNotFound(t *testing.T) {
 	orderServiceClient := new(mockOrderServiceClient)
 	orderRecordService := new(mockOrderRecordService)
 	billingStorageService := new(mockBillingStorageService)
+	fulfillmentContactsStorageService := new(mockFulfillmentContactsStorageService)
 	auditService := new(mockAuditService)
 	cacheService := new(mockCacheService)
 
-	handler := NewStatusHandler(callbackService, idempotencyService, orderServiceClient, orderRecordService, billingStorageService, auditService, cacheService, "test-bpp-id", "https://bpp.example.com", logger)
+	handler := NewStatusHandler(callbackService, idempotencyService, orderServiceClient, orderRecordService, billingStorageService, fulfillmentContactsStorageService, auditService, cacheService, "test-bpp-id", "https://bpp.example.com", logger)
 
 	clientOrderID := uuid.New().String()
 	transactionID := uuid.New().String()

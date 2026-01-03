@@ -117,6 +117,10 @@ func main() {
 	billingStorageTTL := 24 * time.Hour
 	billingStorageServiceInstance := billingStorageService.NewBillingStorageService(cacheServiceInstance, billingStorageTTL, logger)
 
+	// Initialize fulfillment contacts storage service (30 day TTL per ONDC requirement)
+	fulfillmentContactsTTL := 30 * 24 * time.Hour // 30 days
+	fulfillmentContactsServiceInstance := billingStorageService.NewFulfillmentContactsStorageService(cacheServiceInstance, fulfillmentContactsTTL, logger)
+
 	// Initialize event idempotency service
 	eventIdempotencyInstance := eventIdempotencyService.NewService(redisClient.GetClient(), 24*time.Hour, logger)
 
@@ -153,16 +157,17 @@ func main() {
 
 	// Convert services to handler interfaces
 	var (
-		callbackServiceInterface       ondc.CallbackService        = callbackService
-		idempotencyServiceInterface    ondc.IdempotencyService     = idempotencyService
-		orderServiceClientInterface    ondc.OrderServiceClient     = orderServiceClient
-		orderRecordServiceInterface    ondc.OrderRecordService     = orderRecordRepo
-		eventPublisherInterface        ondc.EventPublisher         = eventPublisher
-		eventConsumerInterface         ondc.EventConsumer          = eventConsumer
-		billingStorageServiceInterface ondc.BillingStorageService  = billingStorageServiceInstance
-		auditServiceInterface          ondc.AuditService           = auditServiceInstance
-		clientAuthServiceInterface     middleware.AuthService      = clientAuthService
-		rateLimitServiceInterface      middleware.RateLimitService = rateLimitService
+		callbackServiceInterface                   ondc.CallbackService                   = callbackService
+		idempotencyServiceInterface                ondc.IdempotencyService                = idempotencyService
+		orderServiceClientInterface                ondc.OrderServiceClient                = orderServiceClient
+		orderRecordServiceInterface                ondc.OrderRecordService                = orderRecordRepo
+		eventPublisherInterface                    ondc.EventPublisher                    = eventPublisher
+		eventConsumerInterface                     ondc.EventConsumer                     = eventConsumer
+		billingStorageServiceInterface             ondc.BillingStorageService             = billingStorageServiceInstance
+		fulfillmentContactsStorageServiceInterface ondc.FulfillmentContactsStorageService = fulfillmentContactsServiceInstance
+		auditServiceInterface                      ondc.AuditService                      = auditServiceInstance
+		clientAuthServiceInterface                 middleware.AuthService                 = clientAuthService
+		rateLimitServiceInterface                  middleware.RateLimitService            = rateLimitService
 	)
 
 	// Initialize ONDC handlers
@@ -189,6 +194,7 @@ func main() {
 		orderServiceClientInterface,
 		orderRecordServiceInterface,
 		billingStorageServiceInterface,
+		fulfillmentContactsStorageServiceInterface,
 		auditServiceInterface,
 		cfg.ONDC.ProviderID,
 		cfg.ONDC.BPPID,
@@ -204,6 +210,7 @@ func main() {
 		orderServiceClientInterface,
 		orderRecordServiceInterface,
 		billingStorageServiceInterface,
+		fulfillmentContactsStorageServiceInterface,
 		auditServiceInterface,
 		cfg.ONDC.BPPID,
 		cfg.ONDC.BPPURI,
@@ -216,6 +223,7 @@ func main() {
 		orderServiceClientInterface,
 		orderRecordServiceInterface,
 		billingStorageServiceInterface,
+		fulfillmentContactsStorageServiceInterface,
 		auditServiceInterface,
 		cacheServiceInstance,
 		cfg.ONDC.BPPID,
@@ -244,6 +252,7 @@ func main() {
 		orderServiceClientInterface,
 		orderRecordServiceInterface,
 		billingStorageServiceInterface,
+		fulfillmentContactsStorageServiceInterface,
 		auditServiceInterface,
 		cfg.ONDC.BPPID,
 		cfg.ONDC.BPPURI,

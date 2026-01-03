@@ -106,6 +106,13 @@ type BillingStorageService interface {
 	DeleteBilling(ctx context.Context, transactionID string) error
 }
 
+// FulfillmentContactsStorageService handles storage and retrieval of fulfillment contacts
+type FulfillmentContactsStorageService interface {
+	StoreFulfillmentContacts(ctx context.Context, transactionID string, contacts map[string]interface{}) error
+	GetFulfillmentContacts(ctx context.Context, transactionID string) (map[string]interface{}, error)
+	DeleteFulfillmentContacts(ctx context.Context, transactionID string) error
+}
+
 // OrderStatus represents order status from Order Service
 type OrderStatus struct {
 	DispatchOrderID string
