@@ -1,0 +1,19 @@
+{
+  "event_type": "CONFIRM_REQUESTED",
+  "event_id": "770e8400-e29b-41d4-a716-446655440003",
+  "event_version": 1,
+  "quote_id": "880e8400-e29b-41d4-a716-446655440004",
+  "client_id": "770e8400-e29b-41d4-a716-446655440002",
+  "client_order_id": "SWG-ORD-982734",
+  "payment_info": {
+    "method": "COD",
+    "amount": {
+      "value": 300.00,
+      "currency": "INR"
+    }
+  },
+  "traceparent": "00-4bf92f3577b34da6a3ce929d0e0e4736-af4c5d6e7f8a9b0c-01",
+  "trace_id": "4bf92f3577b34da6a3ce929d0e0e4736",
+  "timestamp": "2024-01-15T14:10:00.000Z"
+}
+

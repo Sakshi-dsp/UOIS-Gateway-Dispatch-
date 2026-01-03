@@ -1,0 +1,27 @@
+{
+  "event_type": "INIT_REQUESTED",
+  "event_id": "660e8400-e29b-41d4-a716-446655440001",
+  "event_version": 1,
+  "search_id": "550e8400-e29b-41d4-a716-446655440000",
+  "origin_lat": 12.971599,
+  "origin_lng": 77.594563,
+  "origin_address": "My store name, My building name, My street name, Bengaluru, Karnataka, India, 560001",
+  "destination_lat": 12.935240,
+  "destination_lng": 77.624500,
+  "destination_address": "My house #, My house or building name, My street name, Bengaluru, Karnataka, India, 560076",
+  "package_info": {
+    "weight_kg": 1.0,
+    "dimensions": {
+      "length_cm": 10,
+      "width_cm": 10,
+      "height_cm": 10
+    },
+    "category": "Grocery"
+  },
+  "client_id": "770e8400-e29b-41d4-a716-446655440002",
+  "service_type": "INSTANT",
+  "traceparent": "00-4bf92f3577b34da6a3ce929d0e0e4736-9f3b2c4d5e6f7a8b-01",
+  "trace_id": "4bf92f3577b34da6a3ce929d0e0e4736",
+  "timestamp": "2024-01-15T14:05:00.000Z"
+}
+

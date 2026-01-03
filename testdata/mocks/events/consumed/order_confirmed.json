@@ -1,0 +1,13 @@
+{
+  "event_type": "ORDER_CONFIRMED",
+  "event_id": "bb0e8400-e29b-41d4-a716-446655440007",
+  "event_version": 1,
+  "dispatch_order_id": "ABC0000001",
+  "quote_id": "880e8400-e29b-41d4-a716-446655440004",
+  "rider_id": "RIDER_12345",
+  "assignment_id": "cc0e8400-e29b-41d4-a716-446655440008",
+  "traceparent": "00-4bf92f3577b34da6a3ce929d0e0e4736-af4c5d6e7f8a9b0c-01",
+  "trace_id": "4bf92f3577b34da6a3ce929d0e0e4736",
+  "timestamp": "2024-01-15T14:10:30.000Z"
+}
+

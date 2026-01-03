@@ -42,6 +42,13 @@ type Price struct {
 	Currency string  `json:"currency"`
 }
 
+// BreakupItem represents a price breakup item for ONDC compliance
+type BreakupItem struct {
+	ItemID    string `json:"@ondc/org/item_id"`
+	TitleType string `json:"@ondc/org/title_type"` // "delivery" or "tax"
+	Price     Price  `json:"price"`
+}
+
 // Events Published by UOIS Gateway
 
 // SearchRequestedEvent is published to stream.location.search
@@ -166,14 +173,15 @@ func (e *QuoteComputedEvent) Validate() error {
 // ID Stack Compliance: Uses search_id and quote_id (business correlation IDs) for event correlation
 type QuoteCreatedEvent struct {
 	BaseEvent
-	SearchID                    string     `json:"search_id"` // Business correlation ID (NOT WebSocket correlation_id)
-	QuoteID                     string     `json:"quote_id"`  // Business correlation ID
-	Price                       Price      `json:"price"`
-	TTL                         string     `json:"ttl"` // ISO8601 duration (e.g., "PT15M")
-	TTLSeconds                  int        `json:"ttl_seconds,omitempty"`
-	DistanceOriginToDestination float64    `json:"distance_origin_to_destination,omitempty"`
-	ETAOrigin                   *time.Time `json:"eta_origin,omitempty"`
-	ETADestination              *time.Time `json:"eta_destination,omitempty"`
+	SearchID                    string        `json:"search_id"` // Business correlation ID (NOT WebSocket correlation_id)
+	QuoteID                     string        `json:"quote_id"`  // Business correlation ID
+	Price                       Price         `json:"price"`
+	Breakup                     []BreakupItem `json:"breakup,omitempty"` // ONDC requirement: price breakup details
+	TTL                         string        `json:"ttl"`               // ISO8601 duration (e.g., "PT15M")
+	TTLSeconds                  int           `json:"ttl_seconds,omitempty"`
+	DistanceOriginToDestination float64       `json:"distance_origin_to_destination,omitempty"`
+	ETAOrigin                   *time.Time    `json:"eta_origin,omitempty"`
+	ETADestination              *time.Time    `json:"eta_destination,omitempty"`
 }
 
 // Validate validates QuoteCreatedEvent

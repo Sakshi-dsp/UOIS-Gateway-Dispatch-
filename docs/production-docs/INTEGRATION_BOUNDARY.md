@@ -12,6 +12,59 @@ UOIS Gateway is a middleware service that acts as a protocol translation and rou
   - gRPC for internal service calls (Order Service, Admin Service)
   - HTTP (REST) for Zendesk integration
 
+## Event Summary
+
+### Events Published by UOIS Gateway
+
+UOIS Gateway publishes **3 events**:
+
+| Event Type | Stream | Consumer | Purpose |
+|------------|--------|----------|---------|
+| **SEARCH_REQUESTED** | `stream.location.search` | **Location Service** | Trigger serviceability computation for `/search` flow |
+| **INIT_REQUESTED** | `stream.uois.init_requested` | **Order Service** | Trigger quote validation and creation for `/init` flow |
+| **CONFIRM_REQUESTED** | `stream.uois.confirm_requested` | **Order Service** | Trigger order creation and rider assignment for `/confirm` flow |
+
+### Events Consumed by UOIS Gateway
+
+UOIS Gateway subscribes to **6 event types**:
+
+| Event Type | Stream | Producer | Purpose |
+|------------|--------|----------|---------|
+| **QUOTE_COMPUTED** | `quote:computed` | **Quote Service** | Receive quote for `/search` response → `/on_search` callback |
+| **QUOTE_CREATED** | `stream.uois.quote_created` | **Order Service** | Receive validated quote for `/init` response → `/on_init` callback |
+| **QUOTE_INVALIDATED** | `stream.uois.quote_invalidated` | **Order Service** | Receive quote validation failure for `/init` error response |
+| **ORDER_CONFIRMED** | `stream.uois.order_confirmed` | **Order Service** | Receive order confirmation for `/confirm` response → `/on_confirm` callback |
+| **ORDER_CONFIRM_FAILED** | `stream.uois.order_confirm_failed` | **Order Service** | Receive order confirmation failure for `/confirm` error response |
+| **client.* events** | `stream:admin.client.events` | **Admin Service** | Sync client registry (created, updated, suspended, revoked, api_key_rotated) |
+
+### Consumer Group Strategy
+
+UOIS Gateway uses consumer group: **`uois-gateway-consumers`** (shared across all instances)
+
+### Event Flow Summary
+
+**Pre-order flow:**
+```
+UOIS → SEARCH_REQUESTED → Location Service
+UOIS ← QUOTE_COMPUTED ← Quote Service
+UOIS → INIT_REQUESTED → Order Service  
+UOIS ← QUOTE_CREATED ← Order Service
+UOIS → CONFIRM_REQUESTED → Order Service
+UOIS ← ORDER_CONFIRMED ← Order Service
+```
+
+**Client registry sync:**
+```
+UOIS ← client.* events ← Admin Service
+```
+
+**Note:** All events include:
+- `event_id` (UUID v4) for deduplication
+- `traceparent` (W3C format) for distributed tracing
+- `timestamp` (ISO 8601 UTC)
+
+**Transport:** Redis Streams with consumer groups and ACK mechanism
+
 ## Consumer Role (Events Consumed)
 
 ### From Quote Service

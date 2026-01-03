@@ -266,10 +266,10 @@ The **Universal Order Interface Service (UOIS) Gateway** is a middleware service
   - Consume events from stream `stream.uois.quote_invalidated` using consumer group `uois-gateway-consumers`, filter events by `search_id` correlation for `QUOTE_INVALIDATED` events
   - Receive `QUOTE_CREATED` or `QUOTE_INVALIDATED` event (correlated by `search_id`)
   - Extract fields from event:
-    - From `QUOTE_CREATED`: `quote_id`, `search_id`, `price` (formatted string, e.g., "₹60"), `distance_origin_to_destination`, `eta_origin`, `eta_destination`, `expires_in` (ttl: PT15M), `timestamp`, `traceparent`, `trace_id`
+    - From `QUOTE_CREATED`: `quote_id`, `search_id`, `price` (formatted string, e.g., "₹60"), `breakup` (array of price breakup items for ONDC transparency), `distance_origin_to_destination`, `eta_origin`, `eta_destination`, `expires_in` (ttl: PT15M), `timestamp`, `traceparent`, `trace_id`
     - From `QUOTE_INVALIDATED`: `quote_id`, `search_id`, `error`, `message`, `requires_research`, `timestamp`, `traceparent`, `trace_id`
   - Compose response:
-    - Success: `quote_id`, `price`, `distance_origin_to_destination`, `eta_origin`, `eta_destination`, `expires_in` (PT15M)
+    - Success: `quote_id`, `price`, `breakup` (ONDC requirement: price breakdown with delivery and tax), `distance_origin_to_destination`, `eta_origin`, `eta_destination`, `expires_in` (PT15M)
     - Failure: `error`, `message`, `requires_research`
   - Compose and send `/on_init` callback to client callback URL (`{bap_uri}/on_init`)
   - **Note**: Order Service publishes `QUOTE_CREATED` event to stream `stream.uois.quote_created` or `QUOTE_INVALIDATED` event to stream `stream.uois.quote_invalidated` after TTL validation and quote creation; Location Service and Quote Service communicate via events during revalidation (not directly to UOIS)
@@ -2193,7 +2193,7 @@ The following are explicitly out of scope for v0:
 | Event Type | Stream | Producer | Purpose | Contract |
 |-----------|-------|----------|---------|----------|
 | QUOTE_COMPUTED | `quote:computed` | Quote Service | Receive quote for `/search` response to client | `Order-Service-Dispatch/contracts/events/consumed/quote/quote_computed.json` |
-| QUOTE_CREATED | `stream.uois.quote_created` | Order Service | Receive validated quote for `/init` response to client | `Order-Service-Dispatch/contracts/events/produced/confirmation/order_confirmation_accepted.json` (Note: QUOTE_CREATED schema TBD) |
+| QUOTE_CREATED | `stream.uois.quote_created` | Order Service | Receive validated quote for `/init` response to client (includes `breakup` array for ONDC transparency) | `Order-Service-Dispatch/contracts/events/produced/confirmation/order_confirmation_accepted.json` (Note: QUOTE_CREATED schema includes `breakup` field) |
 | QUOTE_INVALIDATED | `stream.uois.quote_invalidated` | Order Service | Receive quote validation failure for `/init` response to client | TBD |
 | ORDER_CONFIRMED | `stream.uois.order_confirmed` | Order Service | Receive order confirmation for `/confirm` response to client | `Order-Service-Dispatch/contracts/events/produced/confirmation/order_confirmed.json` |
 | ORDER_CONFIRM_FAILED | `stream.uois.order_confirm_failed` | Order Service | Receive order confirmation failure for `/confirm` response to client | `Order-Service-Dispatch/contracts/events/produced/confirmation/order_confirm_failed.json` |

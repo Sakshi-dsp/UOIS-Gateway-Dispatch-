@@ -1,0 +1,15 @@
+{
+  "event_type": "client.created",
+  "event_id": "dd0e8400-e29b-41d4-a716-446655440010",
+  "client_id": "770e8400-e29b-41d4-a716-446655440002",
+  "client_code": "TEST_CLIENT_001",
+  "client_secret_hash": "$2a$10$hashed_secret_here",
+  "allowed_ips": ["192.168.1.0/24"],
+  "status": "ACTIVE",
+  "metadata": {
+    "name": "Test Client",
+    "email": "test@example.com"
+  },
+  "timestamp": "2024-01-15T14:00:00.000Z"
+}
+

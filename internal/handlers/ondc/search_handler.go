@@ -91,6 +91,15 @@ func (h *SearchHandler) HandleSearch(c *gin.Context) {
 		return
 	}
 
+	// Validate payment type (Dispatch does not support COD)
+	intent, _ := req.Message["intent"].(map[string]interface{})
+	paymentInfo, _ := intent["payment"].(map[string]interface{})
+	if err := utils.ValidatePaymentType(paymentInfo); err != nil {
+		h.logger.Warn("payment type validation failed", zap.Error(err), zap.String("trace_id", traceID))
+		h.respondNACK(c, err)
+		return
+	}
+
 	// Check idempotency
 	idempotencyKey := h.buildIdempotencyKey(req.Context.TransactionID, req.Context.MessageID)
 	if existingResponseBytes, exists, err := h.idempotencyService.CheckIdempotency(ctx, idempotencyKey); err == nil && exists {

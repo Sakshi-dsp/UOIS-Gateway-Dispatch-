@@ -1,0 +1,14 @@
+{
+  "event_type": "QUOTE_INVALIDATED",
+  "event_id": "aa0e8400-e29b-41d4-a716-446655440006",
+  "event_version": 1,
+  "quote_id": "880e8400-e29b-41d4-a716-446655440004",
+  "search_id": "550e8400-e29b-41d4-a716-446655440000",
+  "error": "QUOTE_EXPIRED",
+  "message": "Quote TTL expired. Please request a new quote.",
+  "requires_research": true,
+  "timestamp": "2024-01-15T14:05:30.000Z",
+  "traceparent": "00-4bf92f3577b34da6a3ce929d0e0e4736-9f3b2c4d5e6f7a8b-01",
+  "trace_id": "4bf92f3577b34da6a3ce929d0e0e4736"
+}
+

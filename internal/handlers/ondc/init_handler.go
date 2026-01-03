@@ -88,6 +88,15 @@ func (h *InitHandler) HandleInit(c *gin.Context) {
 		return
 	}
 
+	// Validate payment type (Dispatch does not support COD)
+	order, _ := req.Message["order"].(map[string]interface{})
+	paymentInfo, _ := order["payment"].(map[string]interface{})
+	if err := utils.ValidatePaymentType(paymentInfo); err != nil {
+		h.logger.Warn("payment type validation failed", zap.Error(err), zap.String("trace_id", traceID))
+		h.respondNACK(c, err)
+		return
+	}
+
 	// Check idempotency
 	idempotencyKey := h.buildIdempotencyKey(req.Context.TransactionID, req.Context.MessageID)
 	if existingResponseBytes, exists, err := h.idempotencyService.CheckIdempotency(ctx, idempotencyKey); err == nil && exists {
@@ -481,19 +490,23 @@ func (h *InitHandler) buildOnInitCallback(req *models.ONDCRequest, quoteEvent in
 		}
 
 		// Success case: QUOTE_CREATED
+		quoteMap := map[string]interface{}{
+			"id": quoteCreated.QuoteID,
+			"price": map[string]interface{}{
+				"value":    quoteCreated.Price.Value,
+				"currency": quoteCreated.Price.Currency,
+			},
+			"ttl": quoteCreated.TTL,
+		}
+		if len(quoteCreated.Breakup) > 0 {
+			quoteMap["breakup"] = h.convertBreakupToMap(quoteCreated.Breakup)
+		}
 		message := map[string]interface{}{
 			"order": map[string]interface{}{
 				"provider": map[string]interface{}{
 					"id": h.bppID,
 				},
-				"quote": map[string]interface{}{
-					"id": quoteCreated.QuoteID,
-					"price": map[string]interface{}{
-						"value":    quoteCreated.Price.Value,
-						"currency": quoteCreated.Price.Currency,
-					},
-					"ttl": quoteCreated.TTL,
-				},
+				"quote": quoteMap,
 				"items": h.buildItemsWithFulfillment(items, fulfillmentID, quoteCreated),
 			},
 		}
@@ -526,6 +539,21 @@ func (h *InitHandler) buildOnInitCallback(req *models.ONDCRequest, quoteEvent in
 			Message: map[string]string{"en": "internal error"},
 		},
 	}
+}
+
+func (h *InitHandler) convertBreakupToMap(breakup []models.BreakupItem) []map[string]interface{} {
+	result := make([]map[string]interface{}, 0, len(breakup))
+	for _, item := range breakup {
+		result = append(result, map[string]interface{}{
+			"@ondc/org/item_id":    item.ItemID,
+			"@ondc/org/title_type": item.TitleType,
+			"price": map[string]interface{}{
+				"value":    item.Price.Value,
+				"currency": item.Price.Currency,
+			},
+		})
+	}
+	return result
 }
 
 func (h *InitHandler) formatDuration(t *time.Time, baseTime time.Time) string {

@@ -525,14 +525,17 @@ Before proceeding to Phase 1 implementation:
 4. `internal/models/ondc_test.go` - Added tests for timestamp validation, invalid action detection, and TTL format validation
 5. `internal/models/issue.go` - Enhanced with comprehensive allowlist validation for all enum-like fields (IssueStatus, IssueType, Category, ActionType, GRO Level, ContactType, FinancialResolution Status)
 6. `internal/models/issue_test.go` - Added tests for all validation scenarios (invalid enum values, typo detection)
-7. `internal/services/idempotency/idempotency_service.go` - **CRITICAL FIX:** Fixed prefix mismatch bug, changed API to []byte for ONDC signature preservation
-8. `internal/services/idempotency/idempotency_service_test.go` - Updated tests for []byte API
-9. `internal/handlers/ondc/interfaces.go` - Updated IdempotencyService interface to use []byte
-10. `internal/handlers/ondc/*_handler.go` - All 8 handlers updated to marshal/unmarshal JSON bytes for idempotency
-11. `internal/handlers/ondc/search_handler_test.go` - Updated mock to use []byte API
-12. `internal/consumers/event/event_consumer.go` - **CRITICAL FIX:** Added correlation ID filtering before ACK, improved event typing with EventEnvelope
-13. `internal/consumers/event/event_consumer_test.go` - Added correlation mismatch and quote_id correlation tests
-14. `internal/clients/redis/event_publisher.go` - Fixed package declaration (was incorrectly `package idempotency`, now `package redis`)
+7. `internal/models/events.go` - **ENHANCEMENT:** Added `BreakupItem` struct and `Breakup` field to `QuoteCreatedEvent` for ONDC transparency compliance
+8. `internal/services/idempotency/idempotency_service.go` - **CRITICAL FIX:** Fixed prefix mismatch bug, changed API to []byte for ONDC signature preservation
+9. `internal/services/idempotency/idempotency_service_test.go` - Updated tests for []byte API
+10. `internal/handlers/ondc/interfaces.go` - Updated IdempotencyService interface to use []byte
+11. `internal/handlers/ondc/*_handler.go` - All 8 handlers updated to marshal/unmarshal JSON bytes for idempotency
+12. `internal/handlers/ondc/search_handler_test.go` - Updated mock to use []byte API
+13. `internal/handlers/ondc/init_handler.go` - **ENHANCEMENT:** Added breakup array to `/on_init` callback payload, added `convertBreakupToMap()` helper function
+14. `internal/handlers/ondc/init_handler_test.go` - **ENHANCEMENT:** Updated test to include breakup in mock `QuoteCreatedEvent` and verify breakup in callback
+15. `internal/consumers/event/event_consumer.go` - **CRITICAL FIX:** Added correlation ID filtering before ACK, improved event typing with EventEnvelope
+16. `internal/consumers/event/event_consumer_test.go` - Added correlation mismatch and quote_id correlation tests
+17. `internal/clients/redis/event_publisher.go` - Fixed package declaration (was incorrectly `package idempotency`, now `package redis`)
 
 ### Architecture Notes
 
@@ -772,14 +775,14 @@ Before proceeding to Phase 1 implementation:
 - **Production Readiness:** ✅ Package issue fixed, ready for use
 
 **10. ONDC Handlers (`internal/handlers/ondc`)**
-- **Status:** ✅ COMPLETED (All 8 Handlers Implemented)
+- **Status:** ✅ COMPLETED (All 8 Handlers Implemented + Breakup Array Enhancement)
 - **Files Created:**
   - `internal/handlers/ondc/interfaces.go` - Dependency interfaces (EventPublisher, EventConsumer, CallbackService, IdempotencyService, OrderServiceClient, OrderRecordService)
   - **Note:** Interface renamed from `MappingService` to `OrderRecordService` to align with ID isolation principles (no ID mapping, only order record storage)
   - `internal/handlers/ondc/search_handler.go` - `/search` handler implementation (380 lines)
   - `internal/handlers/ondc/search_handler_test.go` - Search handler tests (4 test cases)
   - `internal/handlers/ondc/init_handler.go` - `/init` handler implementation (453 lines)
-  - `internal/handlers/ondc/init_handler_test.go` - Init handler tests (3 test cases)
+  - `internal/handlers/ondc/init_handler_test.go` - Init handler tests (3 test cases, updated with breakup validation)
   - `internal/handlers/ondc/confirm_handler.go` - `/confirm` handler implementation
   - `internal/handlers/ondc/confirm_handler_test.go` - Confirm handler tests (3 test cases)
   - `internal/handlers/ondc/status_handler.go` - `/status` handler implementation (229 lines)
@@ -817,7 +820,14 @@ Before proceeding to Phase 1 implementation:
     - ✅ ACK semantics (receipt only, no business validation in ACK)
     - ✅ Idempotency keys (transaction_id + message_id)
     - ✅ Lifecycle correlation IDs (search_id, quote_id for event correlation; client_order_id for post-confirmation requests)
-- **Test Results:** ✅ All 16 handler tests passing
+  - ✅ **ONDC Transparency Compliance (Breakup Array):**
+    - ✅ `BreakupItem` struct added to `internal/models/events.go` with ONDC-compliant fields (`@ondc/org/item_id`, `@ondc/org/title_type`, `price`)
+    - ✅ `Breakup` field added to `QuoteCreatedEvent` (consumed from Order Service)
+    - ✅ Breakup array included in `/on_init` callback payload (`message.order.quote.breakup`)
+    - ✅ `convertBreakupToMap()` helper function converts `[]BreakupItem` to ONDC-compliant JSON format
+    - ✅ Breakup array conditionally included in callback (only if present in `QuoteCreatedEvent`)
+    - ✅ Test updated to verify breakup array in `/on_init` callback
+- **Test Results:** ✅ All 22 handler tests passing (including breakup validation)
 - **TDD Compliance:** ✅ All handlers follow TDD (tests written first, then implementation)
 - **ONDC Compliance:** ✅ Strict adherence to ONDC Logistics API Contract v1.2.0
 - **Code Quality:** ✅ All functions under 20 lines, dependency injection throughout, single responsibility per component

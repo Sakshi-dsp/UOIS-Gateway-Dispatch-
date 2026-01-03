@@ -1,0 +1,14 @@
+{
+  "event_type": "SEARCH_REQUESTED",
+  "event_id": "550e8400-e29b-41d4-a716-446655440000",
+  "event_version": 1,
+  "search_id": "550e8400-e29b-41d4-a716-446655440000",
+  "origin_lat": 12.971599,
+  "origin_lng": 77.594563,
+  "destination_lat": 12.935240,
+  "destination_lng": 77.624500,
+  "traceparent": "00-4bf92f3577b34da6a3ce929d0e0e4736-8f2a1b2c3d4e5f6a-01",
+  "trace_id": "4bf92f3577b34da6a3ce929d0e0e4736",
+  "timestamp": "2024-01-15T14:00:00.000Z"
+}
+

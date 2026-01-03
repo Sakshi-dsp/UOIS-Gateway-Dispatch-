@@ -1,0 +1,20 @@
+{
+  "event_type": "QUOTE_CREATED",
+  "event_id": "990e8400-e29b-41d4-a716-446655440005",
+  "event_version": 1,
+  "quote_id": "880e8400-e29b-41d4-a716-446655440004",
+  "search_id": "550e8400-e29b-41d4-a716-446655440000",
+  "price": {
+    "value": 59.00,
+    "currency": "INR"
+  },
+  "distance_origin_to_destination": 3.2,
+  "eta_origin": "2024-01-15T14:30:00.000Z",
+  "eta_destination": "2024-01-15T14:45:00.000Z",
+  "expires_in": 900,
+  "ttl": "PT15M",
+  "timestamp": "2024-01-15T14:05:30.000Z",
+  "traceparent": "00-4bf92f3577b34da6a3ce929d0e0e4736-9f3b2c4d5e6f7a8b-01",
+  "trace_id": "4bf92f3577b34da6a3ce929d0e0e4736"
+}
+

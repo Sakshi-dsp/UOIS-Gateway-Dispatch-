@@ -1,0 +1,23 @@
+{
+  "event_type": "QUOTE_COMPUTED",
+  "search_id": "550e8400-e29b-41d4-a716-446655440000",
+  "serviceable": true,
+  "price": {
+    "value": 58.00,
+    "currency": "INR"
+  },
+  "ttl": "PT10M",
+  "ttl_seconds": 600,
+  "eta_origin": "2024-01-15T14:30:00.000Z",
+  "eta_destination": "2024-01-15T14:45:00.000Z",
+  "distance_origin_to_destination": 3.2,
+  "timestamp": "2024-01-15T14:00:30.000Z",
+  "traceparent": "00-4bf92f3577b34da6a3ce929d0e0e4736-8f2a1b2c3d4e5f6a-01",
+  "trace_id": "4bf92f3577b34da6a3ce929d0e0e4736",
+  "metadata": {
+    "trace_id": "4bf92f3577b34da6a3ce929d0e0e4736",
+    "rate_card_id": "rc_001",
+    "zone_id": "zone_001"
+  }
+}
+

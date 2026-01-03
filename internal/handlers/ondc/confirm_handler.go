@@ -85,6 +85,15 @@ func (h *ConfirmHandler) HandleConfirm(c *gin.Context) {
 		return
 	}
 
+	// Validate payment type (Dispatch does not support COD)
+	order, _ := req.Message["order"].(map[string]interface{})
+	paymentInfo, _ := order["payment"].(map[string]interface{})
+	if err := utils.ValidatePaymentType(paymentInfo); err != nil {
+		h.logger.Warn("payment type validation failed", zap.Error(err), zap.String("trace_id", traceID))
+		h.respondNACK(c, err)
+		return
+	}
+
 	// Check idempotency
 	idempotencyKey := h.buildIdempotencyKey(req.Context.TransactionID, req.Context.MessageID)
 	if existingResponseBytes, exists, err := h.idempotencyService.CheckIdempotency(ctx, idempotencyKey); err == nil && exists {
